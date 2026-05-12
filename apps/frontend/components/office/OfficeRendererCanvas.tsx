@@ -6,6 +6,7 @@ import {
   useState,
 } from "react"
 import { OfficeRendererEngine } from "@/engine"
+import { frontendConfig } from "@/lib/config"
 import type {
   ActivityFeedItem,
   RendererStats,
@@ -146,8 +147,8 @@ export default function OfficeRendererCanvas() {
       ? tasks[selectedTaskId]
       : Object.values(tasks).find(
           (task) =>
-            task.status === "in_progress" ||
-            task.status === "assigned"
+            task.status !== "completed" &&
+            task.status !== "cancelled"
         ) || null
 
   return (
@@ -325,6 +326,9 @@ export default function OfficeRendererCanvas() {
       {selectedTask && (
         <TaskDetails
           task={selectedTask}
+          onAction={(action) => {
+            void controlTask(selectedTask.id, action)
+          }}
           assignedAgentName={
             selectedTask.assigned_to
               ? agents[selectedTask.assigned_to]?.name
@@ -348,6 +352,18 @@ export default function OfficeRendererCanvas() {
         />
       )}
     </div>
+  )
+}
+
+async function controlTask(
+  taskId: string,
+  action: "pause" | "resume" | "cancel" | "retry-step"
+) {
+  await fetch(
+    `${frontendConfig.apiUrl}/tasks/${taskId}/${action}`,
+    {
+      method: "POST",
+    }
   )
 }
 
@@ -474,7 +490,8 @@ function DepartmentStatus() {
           (task) =>
             task.department === department &&
             task.status !== "completed" &&
-            task.status !== "failed"
+            task.status !== "failed" &&
+            task.status !== "cancelled"
         ).length
         const idle = Object.values(agents).filter(
           (agent) =>
@@ -566,11 +583,31 @@ function TaskDetails({
   task,
   assignedAgentName,
   managerName,
+  onAction,
 }: {
   task: Task
   assignedAgentName?: string
   managerName?: string
+  onAction: (
+    action: "pause" | "resume" | "cancel" | "retry-step"
+  ) => void
 }) {
+  const phase = task.runtime_phase || task.status
+  const canPause = phase === "executing"
+  const canResume = phase === "paused"
+  const canCancel = ![
+    "completed",
+    "failed",
+    "cancelled",
+  ].includes(phase)
+  const canRetry =
+    phase === "failed" &&
+    Boolean(
+      task.steps?.some(
+        (step) => step.status === "failed"
+      )
+    )
+
   return (
     <div className="absolute bottom-3 right-3 z-10 w-[300px] border border-amber-300/30 bg-black/70 p-4 text-sm text-white shadow-2xl backdrop-blur">
       <div className="text-lg font-semibold text-amber-200">
@@ -586,6 +623,9 @@ function TaskDetails({
 
         <span className="text-white/50">Status</span>
         <span>{task.status}</span>
+
+        <span className="text-white/50">Phase</span>
+        <span>{phase}</span>
 
         <span className="text-white/50">Progress</span>
         <span>{task.progress}%</span>
@@ -605,6 +645,55 @@ function TaskDetails({
 
         <span className="text-white/50">Created</span>
         <span>{new Date(task.created_at * 1000).toLocaleTimeString()}</span>
+
+        <span className="text-white/50">Reviewed</span>
+        <span>
+          {task.reviewed_at
+            ? new Date(task.reviewed_at * 1000)
+                .toLocaleTimeString()
+            : "none"}
+        </span>
+
+        <span className="text-white/50">Completed</span>
+        <span>
+          {task.completed_at
+            ? new Date(task.completed_at * 1000)
+                .toLocaleTimeString()
+            : "none"}
+        </span>
+      </div>
+
+      {task.failure_reason && (
+        <div className="mt-3 border-t border-red-300/20 pt-3 text-xs text-red-200">
+          {task.failure_reason}
+        </div>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3 text-xs">
+        <TaskActionButton
+          disabled={!canPause}
+          onClick={() => onAction("pause")}
+        >
+          Pause
+        </TaskActionButton>
+        <TaskActionButton
+          disabled={!canResume}
+          onClick={() => onAction("resume")}
+        >
+          Resume
+        </TaskActionButton>
+        <TaskActionButton
+          disabled={!canCancel}
+          onClick={() => onAction("cancel")}
+        >
+          Cancel
+        </TaskActionButton>
+        <TaskActionButton
+          disabled={!canRetry}
+          onClick={() => onAction("retry-step")}
+        >
+          Retry step
+        </TaskActionButton>
       </div>
 
       {task.steps && task.steps.length > 0 && (
@@ -647,6 +736,27 @@ function TaskDetails({
   )
 }
 
+function TaskActionButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: string
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="h-7 bg-white/10 px-2 text-white disabled:cursor-not-allowed disabled:opacity-35"
+    >
+      {children}
+    </button>
+  )
+}
+
 function eventToFeedText(
   event: string | Record<string, unknown>
 ) {
@@ -683,6 +793,26 @@ function eventToFeedText(
 
   if (type === "task.reviewed") {
     return `Manager reviewed ${payload.task_title || "task"}`
+  }
+
+  if (type === "task.paused") {
+    return `Paused ${payload.task_title || "task"}`
+  }
+
+  if (type === "task.resumed") {
+    return `Resumed ${payload.task_title || "task"}`
+  }
+
+  if (type === "task.cancelled") {
+    return `Cancelled ${payload.task_title || "task"}`
+  }
+
+  if (type === "task.step_failed") {
+    return `${payload.agent_name || "Agent"} failed ${payload.step_title || "step"}`
+  }
+
+  if (type === "task.retry_started") {
+    return `Retry started: ${payload.step_title || "step"}`
   }
 
   if (type === "manager_selected_task") {

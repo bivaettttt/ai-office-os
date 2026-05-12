@@ -16,7 +16,14 @@ from app.core.agent_runtime.execution import (
     all_steps_completed,
     calculate_task_progress,
     initialize_task_execution,
+    mark_active_step_failed,
     review_completed_task,
+)
+from app.core.agent_runtime.control import (
+    cancel_task,
+    pause_task,
+    resume_task,
+    retry_failed_step,
 )
 from app.core.agent_runtime.planning import (
     generate_task_steps,
@@ -27,9 +34,15 @@ from app.core.orchestration.task_dispatcher import (
     TaskDispatcher,
 )
 from app.core.world import World
+from app.core.world import world as global_world
 from app.models.agent import Agent
 from app.models.department import Department
-from app.models.task import Task
+from app.models.task import (
+    Task,
+    TaskRuntimePhase,
+    TaskStepStatus,
+)
+from app.api.tasks import task_detail
 
 
 def make_agent(
@@ -401,3 +414,246 @@ def test_activity_log_entries():
     assert snapshot["activity_log"][1]["message"] == (
         "Completed step"
     )
+
+
+def test_runtime_phase_defaults():
+    task = Task(
+        title="Default phase",
+        description="Default phase",
+        department="assistant",
+    )
+
+    assert task.runtime_phase == "created"
+
+
+def test_pause_task():
+    test_world = World()
+    task = Task(
+        title="Pause me",
+        description="Pause me",
+        department="development",
+        status="in_progress",
+        runtime_phase=TaskRuntimePhase.EXECUTING,
+        steps=generate_task_steps("development")[:1],
+    )
+    agent = make_agent(
+        "Ethan",
+        "development",
+        ["debugging"],
+        status="working",
+    )
+    task.assigned_to = agent.id
+    agent.current_task_id = task.id
+    test_world.add_agent(agent)
+    test_world.add_task(task)
+
+    pause_task(test_world, task)
+
+    assert task.runtime_phase == "paused"
+    assert agent.status == "idle"
+    assert agent.current_task_id == task.id
+    assert test_world.activity_log[-1]["type"] == (
+        "task_paused"
+    )
+
+
+def test_resume_task():
+    test_world = World()
+    task = Task(
+        title="Resume me",
+        description="Resume me",
+        department="development",
+        status="in_progress",
+        runtime_phase=TaskRuntimePhase.PAUSED,
+        steps=generate_task_steps("development")[:1],
+    )
+    agent = make_agent(
+        "Ethan",
+        "development",
+        ["debugging"],
+        status="idle",
+    )
+    task.assigned_to = agent.id
+    agent.current_task_id = task.id
+    test_world.add_agent(agent)
+    test_world.add_task(task)
+
+    resume_task(test_world, task)
+
+    assert task.runtime_phase == "executing"
+    assert task.status == "in_progress"
+    assert agent.status == "working"
+    assert test_world.activity_log[-1]["type"] == (
+        "task_resumed"
+    )
+
+
+def test_cancel_task_releases_agent():
+    test_world = World()
+    task = Task(
+        title="Cancel me",
+        description="Cancel me",
+        department="development",
+        status="in_progress",
+        runtime_phase=TaskRuntimePhase.EXECUTING,
+    )
+    agent = make_agent(
+        "Ethan",
+        "development",
+        ["debugging"],
+        status="working",
+        workload=1,
+    )
+    task.assigned_to = agent.id
+    agent.current_task_id = task.id
+    test_world.add_agent(agent)
+    test_world.add_task(task)
+
+    cancel_task(test_world, task)
+
+    assert task.status == "cancelled"
+    assert task.runtime_phase == "cancelled"
+    assert agent.status == "idle"
+    assert agent.current_task_id is None
+    assert agent.workload == 0
+    assert test_world.activity_log[-1]["type"] == (
+        "task_cancelled"
+    )
+
+
+def test_failed_step_marks_task_failed():
+    task = Task(
+        title="Fail step",
+        description="Fail step",
+        department="development",
+        status="in_progress",
+        runtime_phase=TaskRuntimePhase.EXECUTING,
+        steps=generate_task_steps("development")[:1],
+    )
+    initialize_task_execution(task, "agent-1")
+
+    step = mark_active_step_failed(
+        task,
+        "test failure",
+    )
+
+    assert step is not None
+    assert step.status == "failed"
+    assert task.status == "failed"
+    assert task.runtime_phase == "failed"
+    assert task.failure_reason == "test failure"
+
+
+def test_retry_failed_step():
+    test_world = World()
+    task = Task(
+        title="Retry step",
+        description="Retry step",
+        department="development",
+        status="failed",
+        runtime_phase=TaskRuntimePhase.FAILED,
+        failure_reason="failed once",
+        steps=generate_task_steps("development")[:1],
+    )
+    agent = make_agent(
+        "Ethan",
+        "development",
+        ["debugging"],
+        status="idle",
+    )
+    task.assigned_to = agent.id
+    test_world.add_agent(agent)
+    test_world.add_task(task)
+    initialize_task_execution(task, agent.id)
+    mark_active_step_failed(task, "failed once")
+
+    step = retry_failed_step(test_world, task)
+
+    assert step is not None
+    assert step.status == "in_progress"
+    assert task.status == "in_progress"
+    assert task.runtime_phase == "executing"
+    assert task.failure_reason is None
+    assert agent.status == "working"
+    assert test_world.activity_log[-1]["type"] == (
+        "task_retry_started"
+    )
+
+
+def test_manager_review_approve():
+    task = Task(
+        title="Review approve",
+        description="Review approve",
+        department="development",
+        steps=generate_task_steps("development")[:1],
+    )
+    initialize_task_execution(task, "agent-1")
+    advance_task_steps(task, "agent-1", 100)
+
+    summary = review_completed_task(task, "Ethan")
+
+    assert task.runtime_phase == "completed"
+    assert task.status == "completed"
+    assert task.result_summary == summary
+
+
+def test_manager_review_failed_for_failed_step():
+    task = Task(
+        title="Review fail",
+        description="Review fail",
+        department="development",
+        steps=generate_task_steps("development")[:1],
+    )
+    task.steps[0].status = TaskStepStatus.FAILED
+
+    summary = review_completed_task(task, "Ethan")
+
+    assert task.runtime_phase == "failed"
+    assert task.status == "failed"
+    assert task.failure_reason == summary
+
+
+def test_task_detail_api_shape():
+    global_world.hydrate(
+        {
+            "agents": {},
+            "departments": {},
+            "tasks": {},
+            "events": [],
+            "activity_log": [],
+        }
+    )
+    agent = make_agent(
+        "Ethan",
+        "development",
+        ["debugging"],
+    )
+    manager = make_agent(
+        "Alex",
+        "development",
+        ["project_management"],
+        is_manager=True,
+    )
+    task = Task(
+        title="Detail",
+        description="Detail",
+        department="development",
+        assigned_to=agent.id,
+        assigned_by_manager_id=manager.id,
+    )
+    global_world.add_agent(agent)
+    global_world.add_agent(manager)
+    global_world.add_task(task)
+    global_world.add_activity(
+        agent.id,
+        task.id,
+        "task_assigned",
+        "Assigned",
+    )
+
+    detail = task_detail(task)
+
+    assert detail["task"]["id"] == task.id
+    assert detail["assigned_agent"]["id"] == agent.id
+    assert detail["assigned_manager"]["id"] == manager.id
+    assert detail["activity_log"][0]["task_id"] == task.id

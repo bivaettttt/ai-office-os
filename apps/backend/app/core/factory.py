@@ -11,6 +11,7 @@ from app.core.agent_runtime.capabilities import (
 from app.core.agent_runtime.planning import (
     generate_task_steps,
 )
+from app.models.task import TaskRuntimePhase
 
 
 def create_department(
@@ -77,6 +78,7 @@ def create_task(
         description=description,
         department=department,
         priority=priority,
+        runtime_phase=TaskRuntimePhase.CREATED,
         plan=[step.title for step in steps],
         steps=steps,
         required_capabilities=normalize_capabilities(

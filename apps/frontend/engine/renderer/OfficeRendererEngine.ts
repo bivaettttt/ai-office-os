@@ -131,7 +131,8 @@ export class OfficeRendererEngine {
     ).filter(
       (task) =>
         task.status !== "completed" &&
-        task.status !== "failed"
+        task.status !== "failed" &&
+        task.status !== "cancelled"
     ).length
     this.scene?.syncWorld(world)
   }

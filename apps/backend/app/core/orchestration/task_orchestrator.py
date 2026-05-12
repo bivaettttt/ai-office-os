@@ -13,6 +13,7 @@ from app.core.agent_runtime.runtime import (
 )
 from app.core.world import world
 from app.orchestration.event_bus import event_bus
+from app.models.task import TaskRuntimePhase
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,9 @@ class TaskOrchestrator:
 
                     if not agent:
                         task.status = "queued"
+                        task.runtime_phase = (
+                            TaskRuntimePhase.QUEUED
+                        )
                         await event_bus.emit(
                             "task.no_free_agents",
                             {

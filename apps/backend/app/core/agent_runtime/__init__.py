@@ -15,6 +15,12 @@ from app.core.agent_runtime.planning import (
     generate_task_plan,
     generate_task_steps,
 )
+from app.core.agent_runtime.control import (
+    cancel_task,
+    pause_task,
+    resume_task,
+    retry_failed_step,
+)
 from app.core.agent_runtime.registry import AgentRegistry
 from app.core.agent_runtime.runtime import AgentRuntimeService
 
@@ -29,5 +35,9 @@ __all__ = [
     "infer_required_capabilities",
     "generate_task_plan",
     "generate_task_steps",
+    "pause_task",
+    "resume_task",
+    "cancel_task",
+    "retry_failed_step",
     "normalize_capabilities",
 ]

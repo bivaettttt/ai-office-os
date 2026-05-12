@@ -214,7 +214,8 @@ export class OfficeScene {
       if (
         task &&
         task.status !== "completed" &&
-        task.status !== "failed"
+        task.status !== "failed" &&
+        task.status !== "cancelled"
       ) {
         const target =
           this.taskDeskForAgent(agent)

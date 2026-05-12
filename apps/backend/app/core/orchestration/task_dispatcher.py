@@ -7,6 +7,7 @@ from app.core.agent_runtime.execution import (
     initialize_task_execution,
 )
 from app.core.world import world
+from app.models.task import TaskRuntimePhase
 
 from app.orchestration.event_bus import (
     event_bus,
@@ -28,6 +29,7 @@ class TaskDispatcher:
         task.assigned_to = agent.id
 
         task.status = TaskStatus.IN_PROGRESS
+        task.runtime_phase = TaskRuntimePhase.EXECUTING
         task.assigned_at = time.time()
         task.updated_at = time.time()
         first_step = initialize_task_execution(

@@ -18,6 +18,19 @@ class TaskStepStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+class TaskRuntimePhase(StrEnum):
+    CREATED = "created"
+    QUEUED = "queued"
+    ASSIGNED = "assigned"
+    PLANNING = "planning"
+    EXECUTING = "executing"
+    REVIEWING = "reviewing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    PAUSED = "paused"
+
+
 class TaskStep(BaseModel):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4())
@@ -53,6 +66,10 @@ class Task(BaseModel):
     priority: str = "normal"
 
     status: TaskStatus = TaskStatus.CREATED
+
+    runtime_phase: TaskRuntimePhase = (
+        TaskRuntimePhase.CREATED
+    )
 
     progress: int = 0
 

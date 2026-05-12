@@ -13,6 +13,19 @@ export type TaskStatus =
   | "completed"
   | "failed"
   | "blocked"
+  | "cancelled"
+
+export type TaskRuntimePhase =
+  | "created"
+  | "queued"
+  | "assigned"
+  | "planning"
+  | "executing"
+  | "reviewing"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "paused"
 
 export type TaskStepStatus =
   | "pending"
@@ -69,6 +82,7 @@ export type Task = {
   department: string
   priority: string
   status: TaskStatus
+  runtime_phase?: TaskRuntimePhase
   progress: number
   plan?: string[]
   steps?: TaskStep[]
@@ -105,6 +119,14 @@ export type AgentActivityLogEntry = {
     | "task_reviewed"
     | "task_completed"
     | "task_failed"
+    | "task_paused"
+    | "task_resumed"
+    | "task_cancelled"
+    | "step_failed"
+    | "task_retry_requested"
+    | "task_retry_started"
+    | "manager_review_approved"
+    | "manager_review_failed"
     | string
   message: string
 }

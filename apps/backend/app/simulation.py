@@ -14,9 +14,10 @@ from app.orchestration.events import (
 from app.core.agent_runtime.execution import (
     advance_task_steps,
     all_steps_completed,
+    mark_active_step_failed,
     review_completed_task,
 )
-from app.models.task import TaskStepStatus
+from app.models.task import TaskRuntimePhase
 
 # =========================================================
 # ROOM BOUNDS
@@ -196,6 +197,13 @@ async def simulate_agents(world_state):
                     )
 
                     if task:
+                        if task.runtime_phase in [
+                            TaskRuntimePhase.PAUSED,
+                            TaskRuntimePhase.CANCELLED,
+                            TaskRuntimePhase.FAILED,
+                            TaskRuntimePhase.COMPLETED,
+                        ]:
+                            continue
 
                         step_events = advance_task_steps(
                             task,
@@ -263,16 +271,47 @@ async def simulate_agents(world_state):
 
                 # RANDOM FAILURE
 
-                if random.random() < 0.003:
+                if task and random.random() < 0.0015:
 
-                    agent.status = "error"
+                    reason = "Step failed during runtime simulation"
 
-                    agent.current_action = (
-                        "Столкнулся с ошибкой"
+                    failed_step = mark_active_step_failed(
+                        task,
+                        reason,
                     )
 
                     await event_bus.emit(
+                        "task.step_failed",
+                        {
+                            "task_id": task.id,
+                            "task_title": task.title,
+                            "step_id": (
+                                failed_step.id
+                                if failed_step
+                                else None
+                            ),
+                            "step_title": (
+                                failed_step.title
+                                if failed_step
+                                else None
+                            ),
+                            "agent_id": agent.id,
+                            "agent_name": agent.name,
+                            "reason": reason,
+                        },
+                    )
 
+                    world_state.add_activity(
+                        agent.id,
+                        task.id,
+                        "step_failed",
+                        (
+                            f"{agent.name} failed step: "
+                            f"{failed_step.title if failed_step else task.title}"
+                        ),
+                    )
+
+                    await event_bus.emit(
                         TASK_FAILED,
 
                         {
@@ -285,30 +324,18 @@ async def simulate_agents(world_state):
                         }
                     )
 
-                    if task:
-                        task.status = "failed"
-                        task.failure_reason = (
-                            "Visual simulation failure"
-                        )
-                        task.updated_at = time.time()
-                        if task.steps:
-                            active_step = task.steps[
-                                task.active_step_index
-                            ]
-                            active_step.status = (
-                                TaskStepStatus.FAILED
-                            )
-                            active_step.completed_at = time.time()
-                        world_state.add_activity(
-                            agent.id,
-                            task.id,
-                            "task_failed",
-                            (
-                                f"{agent.name} failed task: "
-                                f"{task.title}"
-                            ),
-                        )
+                    world_state.add_activity(
+                        agent.id,
+                        task.id,
+                        "task_failed",
+                        (
+                            f"{agent.name} failed task: "
+                            f"{task.title}"
+                        ),
+                    )
 
+                    agent.status = "idle"
+                    agent.current_action = "Ожидает задачу"
                     agent.current_task_id = None
                     agent.task_progress = 0
                     agent.workload = max(0, agent.workload - 1)
@@ -321,6 +348,9 @@ async def simulate_agents(world_state):
                     agent.task_progress = 100
 
                     task.status = "review"
+                    task.runtime_phase = (
+                        TaskRuntimePhase.REVIEWING
+                    )
                     task.updated_at = time.time()
 
                     await event_bus.emit(
@@ -339,6 +369,13 @@ async def simulate_agents(world_state):
                         agent.name,
                     )
 
+                    review_event = (
+                        "manager_review_approved"
+                        if task.runtime_phase
+                        == TaskRuntimePhase.COMPLETED
+                        else "manager_review_failed"
+                    )
+
                     await event_bus.emit(
                         "task.reviewed",
                         {
@@ -354,7 +391,7 @@ async def simulate_agents(world_state):
                     world_state.add_activity(
                         task.assigned_by_manager_id,
                         task.id,
-                        "task_reviewed",
+                        review_event,
                         summary,
                     )
 

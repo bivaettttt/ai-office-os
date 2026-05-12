@@ -4,6 +4,7 @@ import time
 
 from app.models.task import (
     Task,
+    TaskRuntimePhase,
     TaskStep,
     TaskStepStatus,
 )
@@ -18,6 +19,7 @@ def initialize_task_execution(
         return None
 
     task.started_at = task.started_at or time.time()
+    task.runtime_phase = TaskRuntimePhase.EXECUTING
     task.active_step_index = 0
     step = task.steps[0]
     step.status = TaskStepStatus.IN_PROGRESS
@@ -42,6 +44,9 @@ def advance_task_steps(
 ) -> list[dict]:
     events: list[dict] = []
 
+    if task.runtime_phase == TaskRuntimePhase.PAUSED:
+        return events
+
     if not task.steps:
         task.progress = min(100, task.progress + amount)
         return events
@@ -50,6 +55,7 @@ def advance_task_steps(
 
     if active_step.status != TaskStepStatus.IN_PROGRESS:
         active_step.status = TaskStepStatus.IN_PROGRESS
+        task.runtime_phase = TaskRuntimePhase.EXECUTING
         active_step.started_at = active_step.started_at or time.time()
         active_step.assigned_agent_id = agent_id
         events.append(
@@ -104,7 +110,31 @@ def review_completed_task(
     task: Task,
     agent_name: str,
 ) -> str:
+    failed_or_skipped = [
+        step
+        for step in task.steps
+        if step.status
+        in [
+            TaskStepStatus.FAILED,
+            TaskStepStatus.SKIPPED,
+        ]
+    ]
+
+    if failed_or_skipped:
+        task.status = TaskStatus.FAILED
+        task.runtime_phase = TaskRuntimePhase.FAILED
+        task.reviewed_at = time.time()
+        task.updated_at = time.time()
+        summary = (
+            f"Task failed during manager review. "
+            f"{len(failed_or_skipped)} step(s) did not complete."
+        )
+        task.result_summary = summary
+        task.failure_reason = summary
+        return summary
+
     task.status = TaskStatus.COMPLETED
+    task.runtime_phase = TaskRuntimePhase.COMPLETED
     task.progress = 100
     task.completed_at = time.time()
     task.reviewed_at = time.time()
@@ -116,3 +146,24 @@ def review_completed_task(
     task.result_summary = summary
     task.result = summary
     return summary
+
+
+def mark_active_step_failed(
+    task: Task,
+    reason: str,
+) -> TaskStep | None:
+    if not task.steps:
+        task.status = TaskStatus.FAILED
+        task.runtime_phase = TaskRuntimePhase.FAILED
+        task.failure_reason = reason
+        task.updated_at = time.time()
+        return None
+
+    step = task.steps[task.active_step_index]
+    step.status = TaskStepStatus.FAILED
+    step.completed_at = time.time()
+    task.status = TaskStatus.FAILED
+    task.runtime_phase = TaskRuntimePhase.FAILED
+    task.failure_reason = reason
+    task.updated_at = time.time()
+    return step

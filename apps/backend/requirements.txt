@@ -1,0 +1,10 @@
+fastapi==0.136.1
+uvicorn==0.46.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
+python-dotenv==1.2.2
+pytest==9.0.2
+pytest-timeout==2.4.0
+httpx==0.28.1
+websockets==16.0
+ollama==0.6.2

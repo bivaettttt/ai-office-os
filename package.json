@@ -1,0 +1,17 @@
+{
+  "name": "ai-office-os",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/frontend",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "backend": "cd apps/backend && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "frontend": "npm --prefix apps/frontend run dev",
+    "lint": "npm --prefix apps/frontend run lint",
+    "backend:test": "cd apps/backend && python3 -m pytest",
+    "frontend:typecheck": "npm --prefix apps/frontend run typecheck"
+  }
+}

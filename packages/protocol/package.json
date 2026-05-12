@@ -1,0 +1,12 @@
+{
+  "name": "@ai-office/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@ai-office/types": "file:../types"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

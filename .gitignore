@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS files
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+*.local
+
+# Local persistence
+apps/backend/storage/world_state.json
+
+# Temporary, cache, and log files
+tmp/
+temp/
+.cache/
+cache/
+logs/
+*.log
+*.tmp
+*.cache

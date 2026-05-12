@@ -8,6 +8,9 @@ from app.core.agent_runtime.capabilities import (
     infer_required_capabilities,
     normalize_capabilities,
 )
+from app.core.agent_runtime.planning import (
+    generate_task_steps,
+)
 
 
 def create_department(
@@ -67,11 +70,15 @@ def create_task(
     required_capabilities: list[str] | None = None,
 ):
 
+    steps = generate_task_steps(department)
+
     task = Task(
         title=title,
         description=description,
         department=department,
         priority=priority,
+        plan=[step.title for step in steps],
+        steps=steps,
         required_capabilities=normalize_capabilities(
             required_capabilities
             or infer_required_capabilities(

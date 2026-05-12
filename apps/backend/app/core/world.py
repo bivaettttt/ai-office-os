@@ -20,6 +20,8 @@ class World:
 
         self.events: list[dict] = []
 
+        self.activity_log: list[dict] = []
+
     # =====================================================
     # AGENTS
     # =====================================================
@@ -122,6 +124,10 @@ class World:
         }
 
         self.events = data.get("events", [])[-200:]
+        self.activity_log = data.get(
+            "activity_log",
+            [],
+        )[-500:]
 
     # =====================================================
     # EVENTS
@@ -142,6 +148,31 @@ class World:
         )
 
         self.events = self.events[-200:]
+
+    # =====================================================
+    # ACTIVITY LOG
+    # =====================================================
+
+    def add_activity(
+        self,
+        agent_id: str | None,
+        task_id: str | None,
+        activity_type: str,
+        message: str,
+    ):
+
+        self.activity_log.append(
+            {
+                "id": f"{int(time.time() * 1000)}-{len(self.activity_log)}",
+                "timestamp": time.time(),
+                "agent_id": agent_id,
+                "task_id": task_id,
+                "type": activity_type,
+                "message": message,
+            }
+        )
+
+        self.activity_log = self.activity_log[-500:]
 
     # =====================================================
     # SERIALIZE
@@ -166,6 +197,8 @@ class World:
             },
 
             "events": self.events,
+
+            "activity_log": self.activity_log,
         }
 
 

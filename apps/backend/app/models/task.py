@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Optional
 from pydantic import BaseModel, Field
 
@@ -7,6 +8,34 @@ import uuid
 import time
 
 from app.schemas.protocol import TaskStatus
+
+
+class TaskStepStatus(StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class TaskStep(BaseModel):
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4())
+    )
+
+    title: str
+
+    description: str
+
+    status: TaskStepStatus = TaskStepStatus.PENDING
+
+    progress: int = 0
+
+    started_at: Optional[float] = None
+
+    completed_at: Optional[float] = None
+
+    assigned_agent_id: Optional[str] = None
 
 
 class Task(BaseModel):
@@ -27,6 +56,12 @@ class Task(BaseModel):
 
     progress: int = 0
 
+    plan: list[str] = Field(default_factory=list)
+
+    steps: list[TaskStep] = Field(default_factory=list)
+
+    active_step_index: int = 0
+
     assigned_to: Optional[str] = None
 
     assigned_by_manager_id: Optional[str] = None
@@ -45,6 +80,14 @@ class Task(BaseModel):
 
     assigned_at: Optional[float] = None
 
+    started_at: Optional[float] = None
+
     completed_at: Optional[float] = None
 
+    reviewed_at: Optional[float] = None
+
     result: Optional[str] = None
+
+    result_summary: Optional[str] = None
+
+    failure_reason: Optional[str] = None

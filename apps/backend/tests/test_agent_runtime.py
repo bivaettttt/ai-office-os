@@ -11,8 +11,21 @@ from app.core.agent_runtime.departments import (
 from app.core.agent_runtime.matching import (
     CapabilityMatcher,
 )
+from app.core.agent_runtime.execution import (
+    advance_task_steps,
+    all_steps_completed,
+    calculate_task_progress,
+    initialize_task_execution,
+    review_completed_task,
+)
+from app.core.agent_runtime.planning import (
+    generate_task_steps,
+)
 from app.core.agent_runtime.registry import AgentRegistry
 from app.core.agent_runtime.runtime import AgentRuntimeService
+from app.core.orchestration.task_dispatcher import (
+    TaskDispatcher,
+)
 from app.core.world import World
 from app.models.agent import Agent
 from app.models.department import Department
@@ -236,3 +249,155 @@ def test_task_capability_inference():
         "Write article post",
         "content",
     ) == ["content_writing"]
+
+
+def test_plan_generation_by_department():
+    development_steps = generate_task_steps(
+        "development"
+    )
+    analytics_steps = generate_task_steps(
+        "analytics"
+    )
+
+    assert [
+        step.title
+        for step in development_steps
+    ] == [
+        "Understand request",
+        "Inspect project context",
+        "Implement change",
+        "Validate result",
+        "Summarize output",
+    ]
+    assert analytics_steps[0].title == (
+        "Understand research goal"
+    )
+
+
+def test_task_steps_initialized_on_creation():
+    task = Task(
+        title="Build feature",
+        description="Build feature",
+        department="development",
+        steps=generate_task_steps("development"),
+    )
+    task.plan = [step.title for step in task.steps]
+
+    assert len(task.steps) == 5
+    assert task.plan[0] == "Understand request"
+    assert task.steps[0].status == "pending"
+
+
+def test_first_step_starts_on_assignment():
+    task = Task(
+        title="Fix bug",
+        description="Fix bug",
+        department="development",
+        steps=generate_task_steps("development"),
+    )
+    agent = make_agent(
+        "Ethan",
+        "development",
+        ["debugging"],
+    )
+
+    asyncio.run(
+        TaskDispatcher().dispatch_task(task, agent)
+    )
+
+    assert task.status == "in_progress"
+    assert task.active_step_index == 0
+    assert task.steps[0].status == "in_progress"
+    assert task.steps[0].assigned_agent_id == agent.id
+    assert task.started_at is not None
+
+
+def test_progress_moves_through_steps():
+    task = Task(
+        title="Fix bug",
+        description="Fix bug",
+        department="development",
+        steps=generate_task_steps("development")[:2],
+    )
+    agent_id = "agent-1"
+
+    initialize_task_execution(task, agent_id)
+    events = advance_task_steps(task, agent_id, 100)
+
+    assert task.steps[0].status == "completed"
+    assert task.steps[1].status == "in_progress"
+    assert task.active_step_index == 1
+    assert calculate_task_progress(task) == 50
+    assert [
+        event["type"]
+        for event in events
+    ] == ["step_completed", "step_started"]
+
+
+def test_task_completes_only_after_all_steps_completed():
+    task = Task(
+        title="Fix bug",
+        description="Fix bug",
+        department="development",
+        steps=generate_task_steps("development")[:2],
+    )
+    agent_id = "agent-1"
+
+    initialize_task_execution(task, agent_id)
+    advance_task_steps(task, agent_id, 100)
+
+    assert all_steps_completed(task) is False
+
+    advance_task_steps(task, agent_id, 100)
+
+    assert all_steps_completed(task) is True
+    assert task.progress == 100
+
+
+def test_manager_review_stub():
+    task = Task(
+        title="Fix bug",
+        description="Fix bug",
+        department="development",
+        steps=generate_task_steps("development")[:1],
+    )
+    initialize_task_execution(task, "agent-1")
+    advance_task_steps(task, "agent-1", 100)
+
+    summary = review_completed_task(
+        task,
+        "Ethan",
+    )
+
+    assert task.status == "completed"
+    assert task.reviewed_at is not None
+    assert task.completed_at is not None
+    assert task.result_summary == summary
+    assert "1 steps" in summary
+
+
+def test_activity_log_entries():
+    test_world = World()
+
+    test_world.add_activity(
+        "agent-1",
+        "task-1",
+        "task_assigned",
+        "Assigned task",
+    )
+    test_world.add_activity(
+        "agent-1",
+        "task-1",
+        "step_completed",
+        "Completed step",
+    )
+
+    snapshot = test_world.serialize()
+
+    assert len(snapshot["activity_log"]) == 2
+    assert snapshot["activity_log"][0]["type"] == (
+        "task_assigned"
+    )
+    assert snapshot["activity_log"][1]["message"] == (
+        "Completed step"
+    )

@@ -13,6 +13,7 @@ import type {
 } from "@/engine"
 import { useWorldStore } from "@/store/useWorldStore"
 import type {
+  AgentActivityLogEntry,
   Task,
   WorldState,
 } from "@ai-office/types"
@@ -25,6 +26,7 @@ function selectWorldState(): WorldState {
     departments: state.departments,
     tasks: state.tasks,
     events: state.events,
+    activity_log: state.activity_log,
   }
 }
 
@@ -65,6 +67,9 @@ export default function OfficeRendererCanvas() {
   const departments = useWorldStore(
     (state) => state.departments
   )
+  const activityLog = useWorldStore(
+    (state) => state.activity_log || []
+  )
 
   useEffect(() => {
     let disposed = false
@@ -103,6 +108,7 @@ export default function OfficeRendererCanvas() {
           departments: state.departments,
           tasks: state.tasks,
           events: state.events,
+          activity_log: state.activity_log,
         })
 
         if (state.events.length !== eventCountRef.current) {
@@ -305,52 +311,15 @@ export default function OfficeRendererCanvas() {
       </div>
 
       {selectedAgent && (
-        <div className="absolute bottom-3 left-3 z-10 w-[280px] border border-cyan-300/30 bg-black/70 p-4 text-sm text-white shadow-2xl backdrop-blur">
-          <div className="text-lg font-semibold text-cyan-200">
-            {selectedAgent.name}
-            {selectedAgent.isManager && (
-              <span className="ml-2 align-middle text-[10px] font-normal uppercase tracking-normal text-amber-200">
-                manager
-              </span>
-            )}
-          </div>
-
-          <div className="mt-3 grid grid-cols-[96px_1fr] gap-y-2 text-xs">
-            <span className="text-white/50">Role</span>
-            <span>{selectedAgent.role}</span>
-
-            <span className="text-white/50">
-              Department
-            </span>
-            <span>{selectedAgent.department}</span>
-
-            <span className="text-white/50">
-              Status
-            </span>
-            <span>{selectedAgent.status}</span>
-
-            <span className="text-white/50">
-              Task
-            </span>
-            <span>
-              {selectedAgent.currentTaskId || "none"}
-            </span>
-
-            <span className="text-white/50">
-              Capabilities
-            </span>
-            <span className="max-h-16 overflow-hidden text-[11px] text-white/75">
-              {selectedAgent.capabilities?.join(", ") || "none"}
-            </span>
-
-            <span className="text-white/50">
-              Position
-            </span>
-            <span>
-              {selectedAgent.x}, {selectedAgent.y}
-            </span>
-          </div>
-        </div>
+        <AgentDetails
+          agent={selectedAgent}
+          currentTask={
+            selectedAgent.currentTaskId
+              ? tasks[selectedAgent.currentTaskId]
+              : undefined
+          }
+          activityLog={activityLog}
+        />
       )}
 
       {selectedTask && (
@@ -378,6 +347,99 @@ export default function OfficeRendererCanvas() {
           }
         />
       )}
+    </div>
+  )
+}
+
+function AgentDetails({
+  agent,
+  currentTask,
+  activityLog,
+}: {
+  agent: SelectedAgentInfo
+  currentTask?: Task
+  activityLog: AgentActivityLogEntry[]
+}) {
+  const activeStep =
+    currentTask?.steps?.[
+      currentTask.active_step_index || 0
+    ]
+  const recentActivity = activityLog
+    .filter(
+      (entry) =>
+        entry.agent_id === agent.id ||
+        entry.task_id === agent.currentTaskId
+    )
+    .slice(-3)
+    .reverse()
+
+  return (
+    <div className="absolute bottom-3 left-3 z-10 w-[280px] border border-cyan-300/30 bg-black/70 p-4 text-sm text-white shadow-2xl backdrop-blur">
+      <div className="text-lg font-semibold text-cyan-200">
+        {agent.name}
+        {agent.isManager && (
+          <span className="ml-2 align-middle text-[10px] font-normal uppercase tracking-normal text-amber-200">
+            manager
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-[96px_1fr] gap-y-2 text-xs">
+        <span className="text-white/50">Role</span>
+        <span>{agent.role}</span>
+
+        <span className="text-white/50">
+          Department
+        </span>
+        <span>{agent.department}</span>
+
+        <span className="text-white/50">Status</span>
+        <span>{agent.status}</span>
+
+        <span className="text-white/50">Task</span>
+        <span>
+          {currentTask?.title || agent.currentTaskId || "none"}
+        </span>
+
+        <span className="text-white/50">Step</span>
+        <span>
+          {activeStep
+            ? `${activeStep.title} · ${activeStep.progress}%`
+            : "none"}
+        </span>
+
+        <span className="text-white/50">
+          Capabilities
+        </span>
+        <span className="max-h-16 overflow-hidden text-[11px] text-white/75">
+          {agent.capabilities?.join(", ") || "none"}
+        </span>
+
+        <span className="text-white/50">
+          Position
+        </span>
+        <span>
+          {agent.x}, {agent.y}
+        </span>
+      </div>
+
+      <div className="mt-3 border-t border-white/10 pt-2 text-xs">
+        <div className="mb-1 text-white/50">
+          Recent activity
+        </div>
+        {recentActivity.length === 0 ? (
+          <div className="text-white/35">none</div>
+        ) : (
+          recentActivity.map((entry) => (
+            <div
+              key={entry.id}
+              className="truncate text-white/70"
+            >
+              {entry.message}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
@@ -544,6 +606,43 @@ function TaskDetails({
         <span className="text-white/50">Created</span>
         <span>{new Date(task.created_at * 1000).toLocaleTimeString()}</span>
       </div>
+
+      {task.steps && task.steps.length > 0 && (
+        <div className="mt-3 border-t border-white/10 pt-3 text-xs">
+          <div className="mb-2 font-semibold text-white">
+            Plan
+          </div>
+          <div className="space-y-1">
+            {task.steps.map((step, index) => (
+              <div
+                key={step.id}
+                className={
+                  index ===
+                  (task.active_step_index || 0)
+                    ? "text-amber-100"
+                    : "text-white/65"
+                }
+              >
+                <div className="flex justify-between gap-2">
+                  <span className="truncate">
+                    {step.title}
+                  </span>
+                  <span>{step.progress}%</span>
+                </div>
+                <div className="text-[10px] text-white/40">
+                  {step.status}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {task.result_summary && (
+        <div className="mt-3 border-t border-white/10 pt-3 text-xs text-white/70">
+          {task.result_summary}
+        </div>
+      )}
     </div>
   )
 }
@@ -572,6 +671,18 @@ function eventToFeedText(
 
   if (type === "task.started") {
     return `${payload.agent_name || "Agent"} started ${payload.task_title || "task"}`
+  }
+
+  if (type === "task.step_started") {
+    return `${payload.agent_name || "Agent"} started ${payload.step_title || "step"}`
+  }
+
+  if (type === "task.step_completed") {
+    return `${payload.agent_name || "Agent"} completed ${payload.step_title || "step"}`
+  }
+
+  if (type === "task.reviewed") {
+    return `Manager reviewed ${payload.task_title || "task"}`
   }
 
   if (type === "manager_selected_task") {

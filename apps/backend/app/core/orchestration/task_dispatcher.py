@@ -3,6 +3,10 @@ import time
 from app.core.orchestration.task_status import (
     TaskStatus,
 )
+from app.core.agent_runtime.execution import (
+    initialize_task_execution,
+)
+from app.core.world import world
 
 from app.orchestration.event_bus import (
     event_bus,
@@ -26,6 +30,10 @@ class TaskDispatcher:
         task.status = TaskStatus.IN_PROGRESS
         task.assigned_at = time.time()
         task.updated_at = time.time()
+        first_step = initialize_task_execution(
+            task,
+            agent.id,
+        )
 
         # =====================================
         # AGENT
@@ -73,6 +81,35 @@ class TaskDispatcher:
                 "agent_name": agent.name,
             }
         )
+
+        world.add_activity(
+            agent.id,
+            task.id,
+            "task_assigned",
+            f"{agent.name} assigned to {task.title}",
+        )
+
+        if first_step:
+            await event_bus.emit(
+                "task.step_started",
+                {
+                    "task_id": task.id,
+                    "task_title": task.title,
+                    "step_id": first_step.id,
+                    "step_title": first_step.title,
+                    "agent_id": agent.id,
+                    "agent_name": agent.name,
+                },
+            )
+            world.add_activity(
+                agent.id,
+                task.id,
+                "step_started",
+                (
+                    f"{agent.name} started step: "
+                    f"{first_step.title}"
+                ),
+            )
 
 
 dispatcher = TaskDispatcher()

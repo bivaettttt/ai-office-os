@@ -11,6 +11,10 @@ from app.core.agent_runtime.matching import (
     AgentMatch,
     CapabilityMatcher,
 )
+from app.core.agent_runtime.planning import (
+    generate_task_plan,
+    generate_task_steps,
+)
 from app.core.agent_runtime.registry import AgentRegistry
 from app.core.agent_runtime.runtime import AgentRuntimeService
 
@@ -23,5 +27,7 @@ __all__ = [
     "DEPARTMENT_DEFINITIONS",
     "DepartmentDefinition",
     "infer_required_capabilities",
+    "generate_task_plan",
+    "generate_task_steps",
     "normalize_capabilities",
 ]

@@ -14,6 +14,13 @@ export type TaskStatus =
   | "failed"
   | "blocked"
 
+export type TaskStepStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed"
+  | "skipped"
+
 export type Agent = {
   id: string
   name: string
@@ -44,6 +51,17 @@ export type Department = {
   agents: string[]
 }
 
+export type TaskStep = {
+  id: string
+  title: string
+  description: string
+  status: TaskStepStatus
+  progress: number
+  started_at?: number | null
+  completed_at?: number | null
+  assigned_agent_id?: string | null
+}
+
 export type Task = {
   id: string
   title: string
@@ -52,14 +70,21 @@ export type Task = {
   priority: string
   status: TaskStatus
   progress: number
+  plan?: string[]
+  steps?: TaskStep[]
+  active_step_index?: number
   assigned_to?: string | null
   assigned_by_manager_id?: string | null
   required_capabilities?: string[]
   created_at: number
   updated_at?: number
   assigned_at?: number | null
+  started_at?: number | null
   completed_at?: number | null
+  reviewed_at?: number | null
   result?: string | null
+  result_summary?: string | null
+  failure_reason?: string | null
 }
 
 export type Event = {
@@ -68,9 +93,26 @@ export type Event = {
   ts?: number
 }
 
+export type AgentActivityLogEntry = {
+  id: string
+  timestamp: number
+  agent_id?: string | null
+  task_id?: string | null
+  type:
+    | "task_assigned"
+    | "step_started"
+    | "step_completed"
+    | "task_reviewed"
+    | "task_completed"
+    | "task_failed"
+    | string
+  message: string
+}
+
 export type WorldState = {
   agents: Record<string, Agent>
   departments: Record<string, Department>
   tasks: Record<string, Task>
   events: Array<string | Event | Record<string, unknown>>
+  activity_log?: AgentActivityLogEntry[]
 }

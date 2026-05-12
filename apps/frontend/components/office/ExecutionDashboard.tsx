@@ -226,6 +226,14 @@ function GlobalSummary({
         label="Tool blocked"
         value={global.blocked_tool_invocations || 0}
       />
+      <SummaryCard
+        label="Active grants"
+        value={global.active_permission_grants || 0}
+      />
+      <SummaryCard
+        label="Grant allowed"
+        value={global.invocations_allowed_by_grant || 0}
+      />
     </div>
   )
 }

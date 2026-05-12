@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     WORLD_SYNC_INTERVAL_SECONDS: float = Field(default=1.0, gt=0)
     PERSISTENCE_ENABLED: bool = True
     PERSISTENCE_PATH: str = "storage/world_state.json"
+    TOOL_POLICY_PROFILE: Literal[
+        "locked_down",
+        "safe_local",
+        "assisted",
+        "autonomous_safe",
+    ] = "safe_local"
 
     @property
     def cors_origins(self) -> list[str]:

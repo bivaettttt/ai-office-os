@@ -118,6 +118,10 @@ export type RuntimeGlobalMetrics = {
   pending_tool_approvals?: number
   completed_tool_invocations?: number
   blocked_tool_invocations?: number
+  active_permission_grants?: number
+  expired_permission_grants?: number
+  revoked_permission_grants?: number
+  invocations_allowed_by_grant?: number
 }
 
 export type DepartmentRuntimeMetrics = {
@@ -238,6 +242,20 @@ export type RiskLevel =
   | "high"
   | "critical"
 
+export type PolicyProfile =
+  | "locked_down"
+  | "safe_local"
+  | "assisted"
+  | "autonomous_safe"
+
+export type ToolPolicyProfile = PolicyProfile
+
+export type PermissionScopeType =
+  | "agent"
+  | "department"
+  | "task"
+  | "global"
+
 export type ToolCategory =
   | "filesystem"
   | "terminal"
@@ -257,6 +275,8 @@ export type PolicyDecision =
 export type ToolPolicyDecision = {
   decision: PolicyDecision
   reason: string
+  used_grant_ids?: string[]
+  profile?: PolicyProfile
 }
 
 export type ToolInvocationStatus =
@@ -297,6 +317,10 @@ export type ToolInvocation = {
   error?: string | null
   created_at: number
   completed_at?: number | null
+  policy_profile?: PolicyProfile
+  used_grant_ids?: string[]
+  approval_expires_at?: number | null
+  department?: string | null
 }
 
 export type ToolAuditEntry = {
@@ -311,6 +335,25 @@ export type ToolAuditEntry = {
   message: string
   risk_level: RiskLevel
   permissions: Permission[]
+  profile?: PolicyProfile | null
+  grant_ids?: string[]
+  scope?: Record<string, unknown> | null
+  reason?: string | null
+}
+
+export type PermissionGrant = {
+  id: string
+  scope_type: PermissionScopeType
+  scope_id?: string | null
+  permission: Permission
+  tool_id?: string | null
+  risk_level_max?: RiskLevel | null
+  granted_by: string
+  reason: string
+  expires_at?: number | null
+  created_at: number
+  revoked_at?: number | null
+  active: boolean
 }
 
 export type Agent = {
@@ -424,4 +467,5 @@ export type WorldState = {
   commands?: Record<string, UserCommand>
   tool_invocations?: Record<string, ToolInvocation>
   tool_audit_log?: ToolAuditEntry[]
+  permission_grants?: Record<string, PermissionGrant>
 }

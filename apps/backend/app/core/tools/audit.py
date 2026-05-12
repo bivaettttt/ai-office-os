@@ -25,6 +25,16 @@ EVENT_BY_ACTION = {
     ToolAuditAction.REJECTED: "tool_rejected",
     ToolAuditAction.EXECUTED: "tool_executed",
     ToolAuditAction.FAILED: "tool_blocked",
+    ToolAuditAction.GRANT_CREATED: "grant_created",
+    ToolAuditAction.GRANT_REVOKED: "grant_revoked",
+    ToolAuditAction.GRANT_EXPIRED: "grant_expired",
+    ToolAuditAction.POLICY_PROFILE_APPLIED: "policy_profile_applied",
+    ToolAuditAction.SCOPED_PERMISSION_ALLOWED: (
+        "scoped_permission_allowed"
+    ),
+    ToolAuditAction.SCOPED_PERMISSION_MISSING: (
+        "scoped_permission_missing"
+    ),
 }
 
 
@@ -35,6 +45,8 @@ def record_tool_audit(
     action: ToolAuditAction,
     message: str,
     decision: PolicyDecisionValue | None = None,
+    grant_ids: list[str] | None = None,
+    scope: dict | None = None,
 ) -> ToolAuditEntry:
     entry = ToolAuditEntry(
         invocation_id=invocation.id,
@@ -46,6 +58,19 @@ def record_tool_audit(
         message=message,
         risk_level=tool.risk_level,
         permissions=tool.required_permissions,
+        profile=(
+            invocation.policy_profile
+            if invocation
+            else None
+        ),
+        grant_ids=grant_ids or invocation.used_grant_ids,
+        scope=scope
+        or {
+            "agent_id": invocation.agent_id,
+            "task_id": invocation.task_id,
+            "department": invocation.department,
+        },
+        reason=message,
     )
 
     world.add_tool_audit(entry)
@@ -68,6 +93,19 @@ def record_tool_audit(
                 permission.value
                 for permission in tool.required_permissions
             ],
+            "profile": (
+                invocation.policy_profile.value
+                if invocation.policy_profile
+                else None
+            ),
+            "grant_ids": grant_ids or invocation.used_grant_ids,
+            "scope": scope
+            or {
+                "agent_id": invocation.agent_id,
+                "task_id": invocation.task_id,
+                "department": invocation.department,
+            },
+            "reason": message,
         },
     )
 

@@ -8,6 +8,7 @@ from app.models.task import Task
 from app.models.department import Department
 from app.models.command import UserCommand
 from app.core.tools.permissions import (
+    PermissionGrant,
     ToolAuditEntry,
     ToolInvocation,
 )
@@ -32,6 +33,8 @@ class World:
         self.tool_invocations: Dict[str, ToolInvocation] = {}
 
         self.tool_audit_log: list[ToolAuditEntry] = []
+
+        self.permission_grants: Dict[str, PermissionGrant] = {}
 
     # =====================================================
     # AGENTS
@@ -143,6 +146,13 @@ class World:
         self.tool_audit_log.append(entry)
         self.tool_audit_log = self.tool_audit_log[-500:]
 
+    def add_permission_grant(
+        self,
+        grant: PermissionGrant,
+    ):
+
+        self.permission_grants[grant.id] = grant
+
     # =====================================================
     # HYDRATION
     # =====================================================
@@ -189,6 +199,11 @@ class World:
             ToolAuditEntry.model_validate(value)
             for value in data.get("tool_audit_log", [])
         ][-500:]
+        self.permission_grants = {
+            key: PermissionGrant.model_validate(value)
+            for key, value
+            in data.get("permission_grants", {}).items()
+        }
 
     # =====================================================
     # EVENTS
@@ -275,6 +290,11 @@ class World:
                 item.model_dump(mode="json")
                 for item in self.tool_audit_log
             ],
+
+            "permission_grants": {
+                k: v.model_dump(mode="json")
+                for k, v in self.permission_grants.items()
+            },
         }
 
 

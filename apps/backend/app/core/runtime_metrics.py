@@ -30,6 +30,7 @@ def build_runtime_metrics(world: World) -> dict:
     agents = list(world.agents.values())
     commands = list(world.commands.values())
     tool_invocations = list(world.tool_invocations.values())
+    grants = list(world.permission_grants.values())
 
     queued_tasks = [
         task
@@ -134,6 +135,38 @@ def build_runtime_metrics(world: World) -> dict:
                 invocation
                 for invocation in tool_invocations
                 if invocation.status == "blocked"
+            ]
+        ),
+        "active_permission_grants": len(
+            [
+                grant
+                for grant in grants
+                if grant.is_active()
+            ]
+        ),
+        "expired_permission_grants": len(
+            [
+                grant
+                for grant in grants
+                if (
+                    grant.expires_at is not None
+                    and grant.expires_at <= time.time()
+                    and grant.revoked_at is None
+                )
+            ]
+        ),
+        "revoked_permission_grants": len(
+            [
+                grant
+                for grant in grants
+                if grant.revoked_at is not None
+            ]
+        ),
+        "invocations_allowed_by_grant": len(
+            [
+                invocation
+                for invocation in tool_invocations
+                if invocation.used_grant_ids
             ]
         ),
     }

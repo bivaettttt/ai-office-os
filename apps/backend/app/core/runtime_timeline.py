@@ -28,6 +28,9 @@ WARNING_TYPES = {
     "task_retry_requested",
     "tool_approval_required",
     "tool_rejected",
+    "grant_revoked",
+    "grant_expired",
+    "scoped_permission_missing",
 }
 
 MANAGER_TYPES = {
@@ -54,6 +57,12 @@ TOOL_TYPES = {
     "tool_rejected",
     "tool_executed",
     "tool_blocked",
+    "grant_created",
+    "grant_revoked",
+    "grant_expired",
+    "policy_profile_applied",
+    "scoped_permission_allowed",
+    "scoped_permission_missing",
 }
 
 
@@ -406,6 +415,12 @@ def tool_audit_entry(
         "rejected": "tool_rejected",
         "executed": "tool_executed",
         "failed": "tool_blocked",
+        "grant_created": "grant_created",
+        "grant_revoked": "grant_revoked",
+        "grant_expired": "grant_expired",
+        "policy_profile_applied": "policy_profile_applied",
+        "scoped_permission_allowed": "scoped_permission_allowed",
+        "scoped_permission_missing": "scoped_permission_missing",
     }.get(
         str(audit.action),
         f"tool_{audit.action}",
@@ -434,7 +449,12 @@ def severity_for(event_type: str) -> str:
         return "error"
     if event_type in SUCCESS_TYPES or "completed" in event_type:
         return "success"
-    if event_type in {"tool_executed", "tool_approved"}:
+    if event_type in {
+        "tool_executed",
+        "tool_approved",
+        "grant_created",
+        "scoped_permission_allowed",
+    }:
         return "success"
     if event_type in WARNING_TYPES or "cancelled" in event_type:
         return "warning"

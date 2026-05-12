@@ -8,6 +8,9 @@ from app.core.orchestration.task_scheduler import (
 from app.core.orchestration.task_dispatcher import (
     dispatcher,
 )
+from app.core.agent_runtime.runtime import (
+    AgentRuntimeService,
+)
 from app.core.world import world
 from app.orchestration.event_bus import event_bus
 
@@ -15,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 class TaskOrchestrator:
+
+    def __init__(self):
+        self.agent_runtime = AgentRuntimeService(world)
 
     async def process_tasks(self):
 
@@ -36,19 +42,21 @@ class TaskOrchestrator:
 
                 for task in pending_tasks:
 
-                    agent = (
-                        scheduler.get_available_agent(
-                            task.department
-                        )
+                    _manager, agent = (
+                        await self.agent_runtime
+                        .select_agent_for_task(task)
                     )
 
                     if not agent:
                         task.status = "queued"
-                        world.add_event(
+                        await event_bus.emit(
                             "task.no_free_agents",
                             {
                                 "task_id": task.id,
                                 "department": task.department,
+                                "required_capabilities": (
+                                    task.required_capabilities
+                                ),
                             },
                         )
                         continue

@@ -37,6 +37,20 @@ class Agent(BaseModel):
 
     current_task_id: Optional[str] = None
 
+    capabilities: List[str] = Field(default_factory=list)
+
+    workload: int = 0
+
+    performance_score: float = 1.0
+
+    last_active_at: float = Field(
+        default_factory=time.time
+    )
+
+    is_manager: bool = False
+
+    manager_for_department: Optional[str] = None
+
     memory: List[str] = Field(default_factory=list)
 
     last_update: float = Field(

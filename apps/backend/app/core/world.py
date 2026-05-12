@@ -27,6 +27,13 @@ class World:
     def add_agent(self, agent: Agent):
 
         self.agents[agent.id] = agent
+        for department in self.departments.values():
+            if (
+                department.name == agent.department
+                and agent.id not in department.agents
+            ):
+                department.agents.append(agent.id)
+                break
 
     def update_agent(
         self,

@@ -10,19 +10,30 @@ def bootstrap_world():
     # DEVELOPMENT
     # =====================================================
 
-    create_department(
+    development = create_department(
         name="development",
         description="Development Department",
     )
 
-    create_agent(
+    development_manager = create_agent(
         name="Alex",
-        role="Frontend Engineer",
+        role="Engineering Manager",
         department="development",
         personality="React expert",
         x=140,
         y=180,
+        capabilities=[
+            "code_generation",
+            "code_review",
+            "debugging",
+            "task_planning",
+            "quality_review",
+            "project_management",
+        ],
+        is_manager=True,
+        manager_for_department="development",
     )
+    development.manager_agent_id = development_manager.id
 
     create_agent(
         name="Ethan",
@@ -37,19 +48,28 @@ def bootstrap_world():
     # ASSISTANT
     # =====================================================
 
-    create_department(
+    assistant = create_department(
         name="assistant",
         description="Assistant Department",
     )
 
-    create_agent(
+    assistant_manager = create_agent(
         name="Luna",
-        role="Executive Assistant",
+        role="Operations Assistant Manager",
         department="assistant",
         personality="Helpful and organized",
         x=860,
         y=180,
+        capabilities=[
+            "scheduling",
+            "communication",
+            "task_planning",
+            "project_management",
+        ],
+        is_manager=True,
+        manager_for_department="assistant",
     )
+    assistant.manager_agent_id = assistant_manager.id
 
     create_agent(
         name="Mia",
@@ -64,19 +84,29 @@ def bootstrap_world():
     # ANALYTICS
     # =====================================================
 
-    create_department(
+    analytics = create_department(
         name="analytics",
         description="Analytics Department",
     )
 
-    create_agent(
+    analytics_manager = create_agent(
         name="Olivia",
-        role="Market Analyst",
+        role="Analytics Manager",
         department="analytics",
         personality="Data-focused",
         x=140,
         y=600,
+        capabilities=[
+            "web_research",
+            "data_analysis",
+            "report_writing",
+            "task_planning",
+            "quality_review",
+        ],
+        is_manager=True,
+        manager_for_department="analytics",
     )
+    analytics.manager_agent_id = analytics_manager.id
 
     create_agent(
         name="Noah",
@@ -91,19 +121,29 @@ def bootstrap_world():
     # CONTENT
     # =====================================================
 
-    create_department(
+    content = create_department(
         name="content",
         description="Content Department",
     )
 
-    create_agent(
+    content_manager = create_agent(
         name="Emma",
-        role="Content Writer",
+        role="Content Manager",
         department="content",
         personality="Creative writer",
         x=860,
         y=600,
+        capabilities=[
+            "content_writing",
+            "report_writing",
+            "communication",
+            "task_planning",
+            "quality_review",
+        ],
+        is_manager=True,
+        manager_for_department="content",
     )
+    content.manager_agent_id = content_manager.id
 
     create_agent(
         name="Sophia",
@@ -112,4 +152,46 @@ def bootstrap_world():
         personality="SEO optimizer",
         x=1040,
         y=600,
+    )
+
+    # =====================================================
+    # OPERATIONS
+    # =====================================================
+
+    operations = create_department(
+        name="operations",
+        description="Operations Department",
+    )
+
+    operations_manager = create_agent(
+        name="Grace",
+        role="Operations Manager",
+        department="operations",
+        personality="Calm coordinator",
+        x=650,
+        y=180,
+        capabilities=[
+            "project_management",
+            "task_planning",
+            "communication",
+            "quality_review",
+        ],
+        is_manager=True,
+        manager_for_department="operations",
+    )
+    operations.manager_agent_id = operations_manager.id
+
+    create_agent(
+        name="Owen",
+        role="Operations Coordinator",
+        department="operations",
+        personality="Process-focused",
+        x=760,
+        y=220,
+        capabilities=[
+            "project_management",
+            "task_planning",
+            "communication",
+            "scheduling",
+        ],
     )

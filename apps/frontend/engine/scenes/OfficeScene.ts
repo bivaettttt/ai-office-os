@@ -30,6 +30,9 @@ export type SelectedAgentInfo = {
   department: string
   status: string
   currentTaskId?: string | null
+  capabilities?: string[]
+  isManager?: boolean
+  managerForDepartment?: string | null
   x: number
   y: number
 }
@@ -256,6 +259,11 @@ export class OfficeScene {
       department: agent.department,
       status: agent.status,
       currentTaskId: agent.current_task_id,
+      capabilities: agent.capabilities || [],
+      isManager: agent.is_manager || false,
+      managerForDepartment: (
+        agent.manager_for_department || null
+      ),
       x: Math.round(position.x),
       y: Math.round(position.y),
     }

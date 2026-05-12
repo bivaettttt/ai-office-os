@@ -26,6 +26,12 @@ export type Agent = {
   status: AgentStatus
   task_progress: number
   current_task_id?: string | null
+  capabilities?: string[]
+  workload?: number
+  performance_score?: number
+  last_active_at?: number
+  is_manager?: boolean
+  manager_for_department?: string | null
   memory?: string[]
   last_update?: number
 }
@@ -47,6 +53,8 @@ export type Task = {
   status: TaskStatus
   progress: number
   assigned_to?: string | null
+  assigned_by_manager_id?: string | null
+  required_capabilities?: string[]
   created_at: number
   updated_at?: number
   assigned_at?: number | null

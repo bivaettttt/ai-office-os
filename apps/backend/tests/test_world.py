@@ -25,8 +25,8 @@ def test_world_state_initialization():
 
     snapshot = world.serialize()
 
-    assert len(snapshot["agents"]) == 8
-    assert len(snapshot["departments"]) == 4
+    assert len(snapshot["agents"]) == 10
+    assert len(snapshot["departments"]) == 5
     assert snapshot["tasks"] == {}
 
 

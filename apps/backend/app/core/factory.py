@@ -3,6 +3,11 @@ from app.models.task import Task
 from app.models.department import Department
 
 from app.core.world import world
+from app.core.agent_runtime.capabilities import (
+    default_capabilities_for_department,
+    infer_required_capabilities,
+    normalize_capabilities,
+)
 
 
 def create_department(
@@ -27,6 +32,9 @@ def create_agent(
     personality: str,
     x: int,
     y: int,
+    capabilities: list[str] | None = None,
+    is_manager: bool = False,
+    manager_for_department: str | None = None,
 ):
 
     agent = Agent(
@@ -36,6 +44,14 @@ def create_agent(
         personality=personality,
         position_x=x,
         position_y=y,
+        capabilities=normalize_capabilities(
+            capabilities
+            or default_capabilities_for_department(
+                department
+            )
+        ),
+        is_manager=is_manager,
+        manager_for_department=manager_for_department,
     )
 
     world.add_agent(agent)
@@ -48,6 +64,7 @@ def create_task(
     description: str,
     department: str,
     priority: str = "normal",
+    required_capabilities: list[str] | None = None,
 ):
 
     task = Task(
@@ -55,6 +72,13 @@ def create_task(
         description=description,
         department=department,
         priority=priority,
+        required_capabilities=normalize_capabilities(
+            required_capabilities
+            or infer_required_capabilities(
+                f"{title} {description}",
+                department,
+            )
+        ),
     )
 
     world.add_task(task)

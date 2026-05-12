@@ -29,6 +29,12 @@ class Task(BaseModel):
 
     assigned_to: Optional[str] = None
 
+    assigned_by_manager_id: Optional[str] = None
+
+    required_capabilities: list[str] = Field(
+        default_factory=list
+    )
+
     created_at: float = Field(
         default_factory=time.time
     )

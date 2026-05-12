@@ -35,12 +35,14 @@ class TaskDispatcher:
 
         agent.current_task_id = task.id
         agent.task_progress = task.progress
+        agent.workload += 1
 
         agent.current_action = (
             f"Working on: {task.title}"
         )
 
         agent.last_update = time.time()
+        agent.last_active_at = time.time()
 
         # =====================================
         # EVENTS
@@ -55,6 +57,8 @@ class TaskDispatcher:
                 "task_title": task.title,
                 "agent_id": agent.id,
                 "agent_name": agent.name,
+                "manager_id": task.assigned_by_manager_id,
+                "required_capabilities": task.required_capabilities,
             }
         )
 

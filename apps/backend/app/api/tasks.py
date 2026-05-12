@@ -1,7 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services.orchestrator import (
     orchestrator,
@@ -10,6 +10,10 @@ from app.services.orchestrator import (
 from app.core.world import world
 from app.core.factory import create_task as create_world_task
 from app.core.orchestration.task_status import TaskStatus
+from app.core.agent_runtime.capabilities import (
+    infer_required_capabilities,
+    normalize_capabilities,
+)
 from app.orchestration.event_bus import event_bus
 
 
@@ -25,6 +29,9 @@ class CreateTaskRequest(BaseModel):
     description: Optional[str] = None
     department: Optional[str] = None
     priority: str = "normal"
+    required_capabilities: list[str] = Field(
+        default_factory=list
+    )
 
 
 def route_department(
@@ -36,6 +43,7 @@ def route_department(
         "analytics",
         "assistant",
         "content",
+        "operations",
     }
 
     if requested_department in allowed:
@@ -65,6 +73,7 @@ def route_department(
             "market",
             "report",
             "metric",
+            "analyze",
         ]
     ):
         return "analytics"
@@ -79,6 +88,18 @@ def route_department(
         ]
     ):
         return "content"
+
+    if any(
+        token in lower
+        for token in [
+            "project",
+            "ops",
+            "operations",
+            "coordinate",
+            "quality",
+        ]
+    ):
+        return "operations"
 
     return "assistant"
 
@@ -111,12 +132,20 @@ async def create_task(
         f"{title} {description}",
         req.department,
     )
+    required_capabilities = normalize_capabilities(
+        req.required_capabilities
+        or infer_required_capabilities(
+            f"{title} {description}",
+            department,
+        )
+    )
 
     task = create_world_task(
         title=title,
         description=description,
         department=department,
         priority=req.priority,
+        required_capabilities=required_capabilities,
     )
     task.status = TaskStatus.QUEUED
 
@@ -127,6 +156,9 @@ async def create_task(
             "title": task.title,
             "department": task.department,
             "priority": task.priority,
+            "required_capabilities": (
+                task.required_capabilities
+            ),
         },
     )
 

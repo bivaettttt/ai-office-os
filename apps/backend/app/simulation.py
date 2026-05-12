@@ -45,6 +45,13 @@ ROOM_BOUNDS = {
         "y1": 500,
         "y2": 760,
     },
+
+    "operations": {
+        "x1": 600,
+        "x2": 820,
+        "y1": 70,
+        "y2": 330,
+    },
 }
 
 # =========================================================
@@ -84,6 +91,14 @@ AGENT_ACTIONS = {
         "Создает контент",
         "Редактирует текст",
         "Готовит пост",
+    ],
+
+    "operations": [
+
+        "Координирует процесс",
+        "Проверяет качество",
+        "Планирует выполнение",
+        "Следит за нагрузкой",
     ],
 }
 
@@ -213,6 +228,8 @@ async def simulate_agents(world_state):
 
                     agent.current_task_id = None
                     agent.task_progress = 0
+                    agent.workload = max(0, agent.workload - 1)
+                    agent.last_active_at = time.time()
 
                 # COMPLETE
 
@@ -257,6 +274,8 @@ async def simulate_agents(world_state):
                     agent.current_task_id = None
 
                     agent.task_progress = 0
+                    agent.workload = max(0, agent.workload - 1)
+                    agent.last_active_at = time.time()
 
             # ERROR
 

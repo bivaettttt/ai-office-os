@@ -62,6 +62,9 @@ export default function OfficeRendererCanvas() {
   const agents = useWorldStore(
     (state) => state.agents
   )
+  const departments = useWorldStore(
+    (state) => state.departments
+  )
 
   useEffect(() => {
     let disposed = false
@@ -305,6 +308,11 @@ export default function OfficeRendererCanvas() {
         <div className="absolute bottom-3 left-3 z-10 w-[280px] border border-cyan-300/30 bg-black/70 p-4 text-sm text-white shadow-2xl backdrop-blur">
           <div className="text-lg font-semibold text-cyan-200">
             {selectedAgent.name}
+            {selectedAgent.isManager && (
+              <span className="ml-2 align-middle text-[10px] font-normal uppercase tracking-normal text-amber-200">
+                manager
+              </span>
+            )}
           </div>
 
           <div className="mt-3 grid grid-cols-[96px_1fr] gap-y-2 text-xs">
@@ -329,6 +337,13 @@ export default function OfficeRendererCanvas() {
             </span>
 
             <span className="text-white/50">
+              Capabilities
+            </span>
+            <span className="max-h-16 overflow-hidden text-[11px] text-white/75">
+              {selectedAgent.capabilities?.join(", ") || "none"}
+            </span>
+
+            <span className="text-white/50">
               Position
             </span>
             <span>
@@ -346,6 +361,21 @@ export default function OfficeRendererCanvas() {
               ? agents[selectedTask.assigned_to]?.name
               : undefined
           }
+          managerName={
+            selectedTask.assigned_by_manager_id
+              ? agents[
+                  selectedTask.assigned_by_manager_id
+                ]?.name
+              : selectedTask.department
+                ? agents[
+                    Object.values(departments).find(
+                      (department) =>
+                        department.name ===
+                        selectedTask.department
+                    )?.manager_agent_id || ""
+                  ]?.name
+                : undefined
+          }
         />
       )}
     </div>
@@ -359,12 +389,16 @@ function DepartmentStatus() {
   const tasks = useWorldStore(
     (state) => state.tasks
   )
+  const departmentsById = useWorldStore(
+    (state) => state.departments
+  )
 
   const departments = [
     "development",
     "analytics",
     "assistant",
     "content",
+    "operations",
   ]
 
   return (
@@ -385,11 +419,22 @@ function DepartmentStatus() {
             agent.department === department &&
             agent.status === "idle"
         ).length
+        const departmentModel = Object.values(
+          departmentsById
+        ).find((item) => item.name === department)
+        const manager = departmentModel?.manager_agent_id
+          ? agents[departmentModel.manager_agent_id]
+          : Object.values(agents).find(
+              (agent) =>
+                agent.is_manager &&
+                agent.manager_for_department ===
+                  department
+            )
 
         return (
           <div
             key={department}
-            className="flex justify-between gap-3"
+            className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5"
           >
             <span className="text-white/50">
               {department}
@@ -397,6 +442,11 @@ function DepartmentStatus() {
             <span>
               {idle}/{count} idle · {active} tasks
             </span>
+            {manager && (
+              <span className="col-span-2 text-[10px] text-amber-200/80">
+                manager: {manager.name}
+              </span>
+            )}
           </div>
         )
       })}
@@ -453,9 +503,11 @@ function TaskList({
 function TaskDetails({
   task,
   assignedAgentName,
+  managerName,
 }: {
   task: Task
   assignedAgentName?: string
+  managerName?: string
 }) {
   return (
     <div className="absolute bottom-3 right-3 z-10 w-[300px] border border-amber-300/30 bg-black/70 p-4 text-sm text-white shadow-2xl backdrop-blur">
@@ -466,6 +518,9 @@ function TaskDetails({
       <div className="mt-3 grid grid-cols-[96px_1fr] gap-y-2 text-xs">
         <span className="text-white/50">Agent</span>
         <span>{assignedAgentName || "unassigned"}</span>
+
+        <span className="text-white/50">Manager</span>
+        <span>{managerName || "none"}</span>
 
         <span className="text-white/50">Status</span>
         <span>{task.status}</span>
@@ -478,6 +533,13 @@ function TaskDetails({
 
         <span className="text-white/50">Department</span>
         <span>{task.department}</span>
+
+        <span className="text-white/50">
+          Capabilities
+        </span>
+        <span className="max-h-16 overflow-hidden text-[11px] text-white/75">
+          {task.required_capabilities?.join(", ") || "none"}
+        </span>
 
         <span className="text-white/50">Created</span>
         <span>{new Date(task.created_at * 1000).toLocaleTimeString()}</span>
@@ -510,6 +572,26 @@ function eventToFeedText(
 
   if (type === "task.started") {
     return `${payload.agent_name || "Agent"} started ${payload.task_title || "task"}`
+  }
+
+  if (type === "manager_selected_task") {
+    return `${payload.manager_name || "Manager"} selected ${payload.task_title || "task"}`
+  }
+
+  if (type === "manager_assigned_worker") {
+    return `${payload.manager_name || "Manager"} assigned ${payload.agent_name || "agent"}`
+  }
+
+  if (type === "capability_match_found") {
+    return `Capability match found: ${payload.agent_name || "agent"}`
+  }
+
+  if (type === "capability_fallback_used") {
+    return `Capability fallback used: ${payload.agent_name || "agent"}`
+  }
+
+  if (type === "no_capable_agent_available") {
+    return `No capable agent available in ${payload.department || "department"}`
   }
 
   if (type === "task.completed") {

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from app.core.world import World
 
 
@@ -151,6 +153,7 @@ def build_runtime_metrics(world: World) -> dict:
         world,
         FAILURE_TYPES,
         12,
+        since=time.time() - 30 * 60,
     )
 
     queue_health = build_queue_health(
@@ -297,6 +300,7 @@ def recent_entries(
     world: World,
     types: set[str],
     limit: int,
+    since: float | None = None,
 ) -> list[dict]:
     combined = [
         entry
@@ -307,6 +311,17 @@ def recent_entries(
         for entry in world.activity_log
         if entry.get("type") in types
     ]
+
+    if since is not None:
+        combined = [
+            entry
+            for entry in combined
+            if entry.get(
+                "ts",
+                entry.get("timestamp", 0),
+            )
+            >= since
+        ]
 
     return sorted(
         combined,

@@ -4,6 +4,9 @@ from app.core.runtime_metrics import (
     build_queue_health,
     build_runtime_metrics,
 )
+from app.core.runtime_timeline import (
+    build_runtime_timeline,
+)
 from app.core.world import World, world
 from app.main import app
 from app.models.agent import Agent
@@ -88,6 +91,7 @@ def make_world():
         UserCommand(
             raw_text="Build API",
             status="task_created",
+            created_task_id=task.id,
         )
     )
     test_world.add_event(
@@ -219,3 +223,130 @@ def test_runtime_metrics_api_shape():
     assert "department_metrics" in data
     assert "agent_workload" in data
     assert "queue_health" in data
+
+
+def test_timeline_builder_by_task():
+    test_world = make_world()
+    task = next(
+        task
+        for task in test_world.tasks.values()
+        if task.title == "Build API"
+    )
+
+    timeline = build_runtime_timeline(
+        test_world,
+        task_id=task.id,
+    )
+
+    assert timeline["total"] > 0
+    assert all(
+        entry["related_task_id"] == task.id
+        for entry in timeline["entries"]
+    )
+
+
+def test_timeline_builder_by_command():
+    test_world = make_world()
+    command = next(iter(test_world.commands.values()))
+
+    timeline = build_runtime_timeline(
+        test_world,
+        command_id=command.id,
+    )
+
+    assert timeline["total"] > 0
+    assert any(
+        entry["related_command_id"] == command.id
+        for entry in timeline["entries"]
+    )
+
+
+def test_timeline_filtering_by_severity():
+    timeline = build_runtime_timeline(
+        make_world(),
+        severity="error",
+    )
+
+    assert timeline["total"] > 0
+    assert all(
+        entry["severity"] == "error"
+        for entry in timeline["entries"]
+    )
+
+
+def test_timeline_api_shape():
+    reset_global_world()
+    world.add_task(
+        Task(
+            title="Queued",
+            description="Queued",
+            department="development",
+            status="queued",
+        )
+    )
+
+    response = TestClient(app).get(
+        "/runtime/timeline?limit=10"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "entries" in data
+    assert "filters_applied" in data
+    assert "total" in data
+
+
+def test_task_drilldown_includes_timeline():
+    reset_global_world()
+    task = Task(
+        title="Drill task",
+        description="Drill task",
+        department="development",
+    )
+    world.add_task(task)
+
+    response = TestClient(app).get(
+        f"/tasks/{task.id}"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["task"]["id"] == task.id
+    assert isinstance(data["timeline"], list)
+    assert isinstance(data["steps"], list)
+
+
+def test_command_drilldown_includes_timeline():
+    reset_global_world()
+    client = TestClient(app)
+    created = client.post(
+        "/commands",
+        json={
+            "text": "сделай лендинг",
+        },
+    ).json()
+
+    response = client.get(
+        f"/commands/{created['command']['id']}"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data["timeline"], list)
+    assert "routing_explanation" in data
+
+
+def test_recent_failures_window():
+    test_world = World()
+    old_ts = 1
+    test_world.events.append(
+        {
+            "type": "task.failed",
+            "payload": {},
+            "ts": old_ts,
+        }
+    )
+
+    metrics = build_runtime_metrics(test_world)
+
+    assert metrics["recent_failures"] == []

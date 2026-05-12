@@ -9,6 +9,8 @@ import { frontendConfig } from "@/lib/config"
 import type {
   DepartmentRuntimeMetrics,
   RuntimeMetrics,
+  RuntimeTimelineEntry,
+  RuntimeTimelineResponse,
 } from "@ai-office/types"
 
 export default function ExecutionDashboard() {
@@ -16,18 +18,31 @@ export default function ExecutionDashboard() {
     useState<RuntimeMetrics | null>(null)
   const [department, setDepartment] =
     useState("all")
+  const [timelineFilter, setTimelineFilter] =
+    useState("all")
+  const [timeline, setTimeline] =
+    useState<RuntimeTimelineResponse | null>(null)
+  const [debugJson, setDebugJson] =
+    useState("")
 
   useEffect(() => {
     let disposed = false
 
     async function loadMetrics() {
-      const response = await fetch(
-        `${frontendConfig.apiUrl}/runtime/metrics`
-      )
-      const data = await response.json()
+      const [metricsResponse, timelineResponse] =
+        await Promise.all([
+          fetch(`${frontendConfig.apiUrl}/runtime/metrics`),
+          fetch(
+            `${frontendConfig.apiUrl}/runtime/timeline?limit=50`
+          ),
+        ])
+      const data = await metricsResponse.json()
+      const timelineData =
+        await timelineResponse.json()
 
       if (!disposed) {
         setMetrics(data)
+        setTimeline(timelineData)
       }
     }
 
@@ -151,6 +166,21 @@ export default function ExecutionDashboard() {
         title="Failures"
         entries={metrics.recent_failures}
       />
+
+      <TimelineSection
+        entries={timeline?.entries || []}
+        filter={timelineFilter}
+        onFilter={setTimelineFilter}
+        onDebug={setDebugJson}
+      />
+
+      {debugJson && (
+        <textarea
+          readOnly
+          value={debugJson}
+          className="mt-3 h-32 w-full resize-none border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-white/70"
+        />
+      )}
     </div>
   )
 }
@@ -283,4 +313,123 @@ function healthClass(health: string) {
     return "bg-amber-400/15 text-amber-300"
   }
   return "bg-red-400/15 text-red-300"
+}
+
+function TimelineSection({
+  entries,
+  filter,
+  onFilter,
+  onDebug,
+}: {
+  entries: RuntimeTimelineEntry[]
+  filter: string
+  onFilter: (value: string) => void
+  onDebug: (value: string) => void
+}) {
+  const filtered = entries.filter((entry) => {
+    if (filter === "errors") {
+      return entry.severity === "error"
+    }
+    if (filter === "all") {
+      return true
+    }
+    return entry.source_type === filter
+  })
+
+  async function copyDebugJson() {
+    const json = JSON.stringify(
+      filtered.slice(0, 50),
+      null,
+      2
+    )
+
+    try {
+      await navigator.clipboard.writeText(json)
+    } catch {
+      onDebug(json)
+      return
+    }
+
+    onDebug(json)
+  }
+
+  return (
+    <div className="mt-4 border-t border-white/10 pt-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="font-semibold">
+          Timeline
+        </div>
+        <button
+          type="button"
+          onClick={copyDebugJson}
+          className="bg-white/10 px-2 py-1 text-[10px] text-white"
+        >
+          Copy debug JSON
+        </button>
+      </div>
+
+      <div className="mb-2 grid grid-cols-5 gap-1 text-[10px]">
+        {["all", "task", "command", "manager", "errors"].map(
+          (item) => (
+            <button
+              type="button"
+              key={item}
+              onClick={() => onFilter(item)}
+              className={
+                filter === item
+                  ? "bg-cyan-400/20 text-cyan-200"
+                  : "bg-white/10 text-white/55"
+              }
+            >
+              {item}
+            </button>
+          )
+        )}
+      </div>
+
+      <div className="max-h-64 space-y-2 overflow-auto">
+        {filtered.slice(0, 50).map((entry) => (
+          <div
+            key={entry.id}
+            className="border border-white/10 bg-black/20 p-2"
+          >
+            <div className="flex justify-between gap-2">
+              <span className="truncate text-white">
+                {entry.title}
+              </span>
+              <span
+                className={`shrink-0 ${severityClass(
+                  entry.severity
+                )}`}
+              >
+                {entry.severity}
+              </span>
+            </div>
+            <div className="truncate text-white/55">
+              {entry.message}
+            </div>
+            <div className="mt-1 text-[10px] text-white/35">
+              {new Date(
+                entry.timestamp * 1000
+              ).toLocaleTimeString()}{" "}
+              · {entry.source_type}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function severityClass(severity: string) {
+  if (severity === "success") {
+    return "text-green-300"
+  }
+  if (severity === "warning") {
+    return "text-amber-300"
+  }
+  if (severity === "error") {
+    return "text-red-300"
+  }
+  return "text-cyan-300"
 }

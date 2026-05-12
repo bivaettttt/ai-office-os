@@ -11,6 +11,9 @@ from app.runtime.project_runner import (
 from app.core.runtime_metrics import (
     build_runtime_metrics,
 )
+from app.core.runtime_timeline import (
+    build_runtime_timeline,
+)
 from app.core.world import world
 
 router = APIRouter()
@@ -50,3 +53,23 @@ def runtime_logs():
 @router.get("/runtime/metrics")
 def runtime_metrics():
     return build_runtime_metrics(world)
+
+
+@router.get("/runtime/timeline")
+def runtime_timeline(
+    task_id: str | None = None,
+    command_id: str | None = None,
+    agent_id: str | None = None,
+    department: str | None = None,
+    severity: str | None = None,
+    limit: int = 100,
+):
+    return build_runtime_timeline(
+        world,
+        task_id=task_id,
+        command_id=command_id,
+        agent_id=agent_id,
+        department=department,
+        severity=severity,
+        limit=limit,
+    )

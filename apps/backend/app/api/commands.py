@@ -11,6 +11,9 @@ from app.core.commands import (
     normalize_command_text,
     route_user_command,
 )
+from app.core.runtime_timeline import (
+    build_runtime_timeline,
+)
 from app.core.factory import create_task
 from app.core.world import world
 from app.models.command import (
@@ -58,6 +61,17 @@ def command_detail(command: UserCommand):
                 == command.created_task_id
             )
         ],
+        "timeline": build_runtime_timeline(
+            world,
+            command_id=command.id,
+            limit=100,
+        )["entries"],
+        "routing_explanation": (
+            f"Command routed to {command.inferred_department} "
+            f"with {', '.join(command.inferred_capabilities)}."
+            if command.inferred_department
+            else None
+        ),
     }
 
 

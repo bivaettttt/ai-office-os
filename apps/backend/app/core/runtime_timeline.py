@@ -1,0 +1,403 @@
+from __future__ import annotations
+
+from app.core.world import World
+
+
+ERROR_TYPES = {
+    "task.failed",
+    "task.step_failed",
+    "task_failed",
+    "step_failed",
+    "command_failed",
+    "manager_review_failed",
+}
+
+SUCCESS_TYPES = {
+    "task.completed",
+    "task.step_completed",
+    "step_completed",
+    "task_completed",
+    "manager_review_approved",
+    "command_task_created",
+}
+
+WARNING_TYPES = {
+    "capability_fallback_used",
+    "task.paused",
+    "task.cancelled",
+    "task_retry_requested",
+}
+
+MANAGER_TYPES = {
+    "manager_selected_task",
+    "manager_assigned_worker",
+    "capability_match_found",
+    "capability_fallback_used",
+    "manager_review_approved",
+    "manager_review_failed",
+}
+
+COMMAND_TYPES = {
+    "command_received",
+    "command_parsed",
+    "command_routed",
+    "command_task_created",
+    "command_failed",
+}
+
+
+def build_runtime_timeline(
+    world: World,
+    task_id: str | None = None,
+    command_id: str | None = None,
+    agent_id: str | None = None,
+    department: str | None = None,
+    severity: str | None = None,
+    limit: int = 100,
+) -> dict:
+    entries = collect_timeline_entries(world)
+
+    if command_id:
+        command = world.commands.get(command_id)
+        related_task_id = (
+            command.created_task_id
+            if command
+            else None
+        )
+        entries = [
+            entry
+            for entry in entries
+            if (
+                entry.get("related_command_id")
+                == command_id
+                or (
+                    related_task_id
+                    and entry.get("related_task_id")
+                    == related_task_id
+                )
+            )
+        ]
+
+    if task_id:
+        entries = [
+            entry
+            for entry in entries
+            if entry.get("related_task_id") == task_id
+        ]
+
+    if agent_id:
+        entries = [
+            entry
+            for entry in entries
+            if entry.get("related_agent_id") == agent_id
+        ]
+
+    if department:
+        entries = [
+            entry
+            for entry in entries
+            if entry.get("metadata", {}).get(
+                "department"
+            )
+            == department
+        ]
+
+    if severity:
+        entries = [
+            entry
+            for entry in entries
+            if entry["severity"] == severity
+        ]
+
+    entries = sorted(
+        entries,
+        key=lambda item: item["timestamp"],
+        reverse=True,
+    )
+
+    return {
+        "entries": entries[:limit],
+        "filters_applied": {
+            "task_id": task_id,
+            "command_id": command_id,
+            "agent_id": agent_id,
+            "department": department,
+            "severity": severity,
+            "limit": limit,
+        },
+        "total": len(entries),
+    }
+
+
+def collect_timeline_entries(world: World) -> list[dict]:
+    entries: list[dict] = []
+
+    for command in world.commands.values():
+        entries.append(
+            {
+                "id": f"command-{command.id}",
+                "timestamp": command.created_at,
+                "source_type": "command",
+                "source_id": command.id,
+                "event_type": command.status,
+                "title": "Command received",
+                "message": command.raw_text,
+                "severity": (
+                    "error"
+                    if command.status == "failed"
+                    else "info"
+                ),
+                "related_task_id": command.created_task_id,
+                "related_command_id": command.id,
+                "related_agent_id": None,
+                "metadata": {
+                    "department": command.inferred_department,
+                    "priority": command.inferred_priority,
+                    "capabilities": command.inferred_capabilities,
+                    "error_message": command.error_message,
+                },
+            }
+        )
+
+        if command.processed_at:
+            entries.append(
+                {
+                    "id": f"command-processed-{command.id}",
+                    "timestamp": command.processed_at,
+                    "source_type": "command",
+                    "source_id": command.id,
+                    "event_type": command.status,
+                    "title": "Command processed",
+                    "message": (
+                        command.error_message
+                        or f"Created task {command.created_task_id}"
+                    ),
+                    "severity": (
+                        "error"
+                        if command.status == "failed"
+                        else "success"
+                    ),
+                    "related_task_id": command.created_task_id,
+                    "related_command_id": command.id,
+                    "related_agent_id": None,
+                    "metadata": {
+                        "department": command.inferred_department,
+                        "priority": command.inferred_priority,
+                    },
+                }
+            )
+
+    command_by_task = {
+        command.created_task_id: command.id
+        for command in world.commands.values()
+        if command.created_task_id
+    }
+
+    for task in world.tasks.values():
+        entries.append(
+            task_entry(
+                task,
+                "task.created",
+                "Task created",
+                task.title,
+                task.created_at,
+                command_by_task.get(task.id),
+            )
+        )
+
+        if task.assigned_at:
+            entries.append(
+                task_entry(
+                    task,
+                    "task.assigned",
+                    "Task assigned",
+                    task.title,
+                    task.assigned_at,
+                    command_by_task.get(task.id),
+                    agent_id=task.assigned_to,
+                )
+            )
+
+        for step in task.steps:
+            if step.started_at:
+                entries.append(
+                    task_entry(
+                        task,
+                        "task.step_started",
+                        step.title,
+                        step.description,
+                        step.started_at,
+                        command_by_task.get(task.id),
+                        agent_id=step.assigned_agent_id,
+                    )
+                )
+            if step.completed_at:
+                entries.append(
+                    task_entry(
+                        task,
+                        f"task.step_{step.status}",
+                        step.title,
+                        step.description,
+                        step.completed_at,
+                        command_by_task.get(task.id),
+                        agent_id=step.assigned_agent_id,
+                    )
+                )
+
+        if task.reviewed_at:
+            entries.append(
+                task_entry(
+                    task,
+                    "task.reviewed",
+                    "Manager review",
+                    task.result_summary or task.title,
+                    task.reviewed_at,
+                    command_by_task.get(task.id),
+                    source_type="manager",
+                    agent_id=task.assigned_by_manager_id,
+                )
+            )
+
+        if task.completed_at:
+            entries.append(
+                task_entry(
+                    task,
+                    "task.completed",
+                    "Task completed",
+                    task.result_summary or task.title,
+                    task.completed_at,
+                    command_by_task.get(task.id),
+                    agent_id=task.assigned_to,
+                )
+            )
+
+    for event in world.events:
+        entries.append(
+            raw_entry(
+                event,
+                command_by_task,
+            )
+        )
+
+    for activity in world.activity_log:
+        entries.append(
+            activity_entry(
+                activity,
+                command_by_task,
+            )
+        )
+
+    return entries
+
+
+def task_entry(
+    task,
+    event_type: str,
+    title: str,
+    message: str,
+    timestamp: float,
+    command_id: str | None,
+    source_type: str = "task",
+    agent_id: str | None = None,
+) -> dict:
+    return {
+        "id": f"{event_type}-{task.id}-{timestamp}",
+        "timestamp": timestamp,
+        "source_type": source_type,
+        "source_id": task.id,
+        "event_type": event_type,
+        "title": title,
+        "message": message,
+        "severity": severity_for(event_type),
+        "related_task_id": task.id,
+        "related_command_id": command_id,
+        "related_agent_id": agent_id,
+        "metadata": {
+            "department": task.department,
+            "status": task.status,
+            "runtime_phase": task.runtime_phase,
+        },
+    }
+
+
+def raw_entry(
+    event: dict,
+    command_by_task: dict[str, str],
+) -> dict:
+    payload = event.get("payload", {})
+    task_id = payload.get("task_id")
+    command_id = (
+        payload.get("command_id")
+        or command_by_task.get(task_id)
+    )
+    agent_id = payload.get("agent_id") or payload.get("manager_id")
+    event_type = event.get("type", "event")
+
+    return {
+        "id": f"event-{event_type}-{event.get('ts', 0)}",
+        "timestamp": event.get("ts", 0),
+        "source_type": source_for(event_type),
+        "source_id": str(agent_id or command_id or task_id or event_type),
+        "event_type": event_type,
+        "title": event_type,
+        "message": str(
+            payload.get("task_title")
+            or payload.get("agent_name")
+            or payload.get("error")
+            or event_type
+        ),
+        "severity": severity_for(event_type),
+        "related_task_id": task_id,
+        "related_command_id": command_id,
+        "related_agent_id": agent_id,
+        "metadata": payload,
+    }
+
+
+def activity_entry(
+    activity: dict,
+    command_by_task: dict[str, str],
+) -> dict:
+    task_id = activity.get("task_id")
+    event_type = activity.get("type", "activity")
+
+    return {
+        "id": activity.get("id", f"activity-{event_type}"),
+        "timestamp": activity.get("timestamp", 0),
+        "source_type": source_for(event_type),
+        "source_id": str(
+            activity.get("agent_id")
+            or task_id
+            or event_type
+        ),
+        "event_type": event_type,
+        "title": event_type,
+        "message": activity.get("message", event_type),
+        "severity": severity_for(event_type),
+        "related_task_id": task_id,
+        "related_command_id": command_by_task.get(task_id),
+        "related_agent_id": activity.get("agent_id"),
+        "metadata": activity,
+    }
+
+
+def severity_for(event_type: str) -> str:
+    if event_type in ERROR_TYPES or "failed" in event_type:
+        return "error"
+    if event_type in SUCCESS_TYPES or "completed" in event_type:
+        return "success"
+    if event_type in WARNING_TYPES or "cancelled" in event_type:
+        return "warning"
+    return "info"
+
+
+def source_for(event_type: str) -> str:
+    if event_type in COMMAND_TYPES:
+        return "command"
+    if event_type in MANAGER_TYPES or event_type.startswith("manager"):
+        return "manager"
+    if event_type.startswith("agent"):
+        return "agent"
+    if event_type.startswith("task") or event_type.startswith("step"):
+        return "task"
+    return "system"

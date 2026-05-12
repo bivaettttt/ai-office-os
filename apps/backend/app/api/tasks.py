@@ -8,6 +8,9 @@ from app.services.orchestrator import (
 )
 
 from app.core.world import world
+from app.core.runtime_timeline import (
+    build_runtime_timeline,
+)
 from app.core.factory import create_task as create_world_task
 from app.core.orchestration.task_status import TaskStatus
 from app.models.task import TaskRuntimePhase
@@ -54,8 +57,22 @@ def task_detail(task):
         else None
     )
 
+    command = next(
+        (
+            item
+            for item in world.commands.values()
+            if item.created_task_id == task.id
+        ),
+        None,
+    )
+
     return {
         "task": task.model_dump(mode="json"),
+        "command": (
+            command.model_dump(mode="json")
+            if command
+            else None
+        ),
         "assigned_agent": (
             assigned_agent.model_dump(mode="json")
             if assigned_agent
@@ -70,6 +87,15 @@ def task_detail(task):
             entry
             for entry in world.activity_log
             if entry.get("task_id") == task.id
+        ],
+        "timeline": build_runtime_timeline(
+            world,
+            task_id=task.id,
+            limit=100,
+        )["entries"],
+        "steps": [
+            step.model_dump(mode="json")
+            for step in task.steps
         ],
     }
 

@@ -154,6 +154,58 @@ export type ManagerDecisionEntry = {
   task_id?: string | null
 }
 
+export type TimelineSeverity =
+  | "info"
+  | "success"
+  | "warning"
+  | "error"
+
+export type TimelineSourceType =
+  | "command"
+  | "task"
+  | "agent"
+  | "manager"
+  | "system"
+
+export type RuntimeTimelineEntry = {
+  id: string
+  timestamp: number
+  source_type: TimelineSourceType
+  source_id: string
+  event_type: string
+  title: string
+  message: string
+  severity: TimelineSeverity
+  related_task_id?: string | null
+  related_command_id?: string | null
+  related_agent_id?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export type RuntimeTimelineResponse = {
+  entries: RuntimeTimelineEntry[]
+  filters_applied: Record<string, unknown>
+  total: number
+}
+
+export type TaskDrilldown = {
+  task: Task
+  command?: UserCommand | null
+  assigned_agent?: Agent | null
+  assigned_manager?: Agent | null
+  timeline: RuntimeTimelineEntry[]
+  steps: TaskStep[]
+  activity_log: AgentActivityLogEntry[]
+}
+
+export type CommandDrilldown = {
+  command: UserCommand
+  created_task?: Task | null
+  timeline: RuntimeTimelineEntry[]
+  routing_explanation?: string | null
+  activity_log: AgentActivityLogEntry[]
+}
+
 export type RuntimeMetrics = {
   global_metrics: RuntimeGlobalMetrics
   department_metrics: DepartmentRuntimeMetrics[]

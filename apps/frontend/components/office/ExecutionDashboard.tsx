@@ -1,0 +1,286 @@
+"use client"
+
+import {
+  useEffect,
+  useState,
+} from "react"
+
+import { frontendConfig } from "@/lib/config"
+import type {
+  DepartmentRuntimeMetrics,
+  RuntimeMetrics,
+} from "@ai-office/types"
+
+export default function ExecutionDashboard() {
+  const [metrics, setMetrics] =
+    useState<RuntimeMetrics | null>(null)
+  const [department, setDepartment] =
+    useState("all")
+
+  useEffect(() => {
+    let disposed = false
+
+    async function loadMetrics() {
+      const response = await fetch(
+        `${frontendConfig.apiUrl}/runtime/metrics`
+      )
+      const data = await response.json()
+
+      if (!disposed) {
+        setMetrics(data)
+      }
+    }
+
+    void loadMetrics()
+    const timer = window.setInterval(
+      loadMetrics,
+      5000
+    )
+
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  if (!metrics) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/50">
+        Loading runtime metrics
+      </div>
+    )
+  }
+
+  const departments =
+    metrics.department_metrics
+  const visibleDepartments =
+    department === "all"
+      ? departments
+      : departments.filter(
+          (item) => item.department === department
+        )
+  const visibleAgents =
+    department === "all"
+      ? metrics.agent_workload
+      : metrics.agent_workload.filter(
+          (agent) => agent.department === department
+        )
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/80">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-2xl">
+          Execution
+        </div>
+        <span
+          className={`rounded px-2 py-1 text-[10px] uppercase ${healthClass(
+            metrics.queue_health
+          )}`}
+        >
+          {metrics.queue_health}
+        </span>
+      </div>
+
+      <select
+        value={department}
+        onChange={(event) =>
+          setDepartment(event.target.value)
+        }
+        className="mb-3 h-8 w-full rounded border border-white/10 bg-[#111827] px-2 text-white outline-none"
+      >
+        <option value="all">All departments</option>
+        {departments.map((item) => (
+          <option
+            key={item.department}
+            value={item.department}
+          >
+            {item.department}
+          </option>
+        ))}
+      </select>
+
+      <GlobalSummary metrics={metrics} />
+
+      <div className="mt-4 border-t border-white/10 pt-3">
+        <div className="mb-2 font-semibold">
+          Departments
+        </div>
+        <div className="space-y-2">
+          {visibleDepartments.map((item) => (
+            <DepartmentCard
+              key={item.department}
+              item={item}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-white/10 pt-3">
+        <div className="mb-2 font-semibold">
+          Agents
+        </div>
+        <div className="max-h-56 space-y-2 overflow-auto">
+          {visibleAgents.map((agent) => (
+            <div
+              key={agent.id}
+              className="border border-white/10 bg-black/20 p-2"
+            >
+              <div className="flex justify-between gap-2">
+                <span className="truncate text-white">
+                  {agent.name}
+                </span>
+                <span>{agent.status}</span>
+              </div>
+              <div className="truncate text-white/45">
+                {agent.role} · {agent.department}
+              </div>
+              <div className="truncate text-white/55">
+                {agent.current_task_title || "idle"}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <LogSection
+        title="Manager decisions"
+        entries={metrics.recent_manager_decisions}
+      />
+
+      <LogSection
+        title="Failures"
+        entries={metrics.recent_failures}
+      />
+    </div>
+  )
+}
+
+function GlobalSummary({
+  metrics,
+}: {
+  metrics: RuntimeMetrics
+}) {
+  const global = metrics.global_metrics
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <SummaryCard
+        label="Queued"
+        value={global.queued_tasks}
+      />
+      <SummaryCard
+        label="Running"
+        value={global.in_progress_tasks}
+      />
+      <SummaryCard
+        label="Failed"
+        value={global.failed_tasks}
+      />
+      <SummaryCard
+        label="Avg progress"
+        value={`${global.average_task_progress}%`}
+      />
+      <SummaryCard
+        label="Busy agents"
+        value={global.busy_agents}
+      />
+      <SummaryCard
+        label="Managers"
+        value={global.managers_count}
+      />
+    </div>
+  )
+}
+
+function SummaryCard({
+  label,
+  value,
+}: {
+  label: string
+  value: string | number
+}) {
+  return (
+    <div className="border border-white/10 bg-black/20 p-2">
+      <div className="text-white/45">
+        {label}
+      </div>
+      <div className="text-lg text-cyan-300">
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function DepartmentCard({
+  item,
+}: {
+  item: DepartmentRuntimeMetrics
+}) {
+  return (
+    <div className="border border-white/10 bg-black/20 p-2">
+      <div className="flex justify-between">
+        <span className="text-white">
+          {item.department}
+        </span>
+        <span>{item.workload_score}</span>
+      </div>
+      <div className="mt-1 text-white/50">
+        {item.busy_agents}/{item.total_agents} busy ·{" "}
+        {item.queued_tasks} queued ·{" "}
+        {item.failed_tasks} failed
+      </div>
+    </div>
+  )
+}
+
+function LogSection({
+  title,
+  entries,
+}: {
+  title: string
+  entries: Array<{
+    type: string
+    message?: string
+    payload?: Record<string, unknown>
+  }>
+}) {
+  return (
+    <div className="mt-4 border-t border-white/10 pt-3">
+      <div className="mb-2 font-semibold">
+        {title}
+      </div>
+      {entries.length === 0 ? (
+        <div className="text-white/35">none</div>
+      ) : (
+        <div className="max-h-36 space-y-2 overflow-auto">
+          {entries.map((entry, index) => (
+            <div
+              key={`${entry.type}-${index}`}
+              className="border-l border-cyan-300/40 pl-2 text-white/60"
+            >
+              {entry.message ||
+                String(
+                  entry.payload?.task_title ||
+                    entry.payload?.agent_name ||
+                    entry.type
+                )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function healthClass(health: string) {
+  if (health === "healthy") {
+    return "bg-green-400/15 text-green-300"
+  }
+  if (health === "busy") {
+    return "bg-cyan-400/15 text-cyan-300"
+  }
+  if (health === "overloaded") {
+    return "bg-amber-400/15 text-amber-300"
+  }
+  return "bg-red-400/15 text-red-300"
+}

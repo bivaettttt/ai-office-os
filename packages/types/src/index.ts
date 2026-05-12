@@ -94,6 +94,75 @@ export type CommandCreateRequest = {
   description?: string | null
 }
 
+export type QueueHealth =
+  | "healthy"
+  | "busy"
+  | "overloaded"
+  | "blocked"
+
+export type RuntimeGlobalMetrics = {
+  total_tasks: number
+  queued_tasks: number
+  in_progress_tasks: number
+  completed_tasks: number
+  failed_tasks: number
+  cancelled_tasks: number
+  paused_tasks: number
+  total_agents: number
+  busy_agents: number
+  idle_agents: number
+  managers_count: number
+  average_task_progress: number
+  active_commands: number
+  failed_commands: number
+}
+
+export type DepartmentRuntimeMetrics = {
+  department: string
+  total_agents: number
+  busy_agents: number
+  idle_agents: number
+  managers: number
+  queued_tasks: number
+  in_progress_tasks: number
+  completed_tasks: number
+  failed_tasks: number
+  workload_score: number
+}
+
+export type AgentWorkloadSummary = {
+  id: string
+  name: string
+  role: string
+  department: string
+  status: AgentStatus
+  current_task_id?: string | null
+  current_task_title?: string | null
+  workload: number
+  performance_score: number
+  capabilities: string[]
+  recent_activity_count: number
+}
+
+export type ManagerDecisionEntry = {
+  type: string
+  payload?: Record<string, unknown>
+  ts?: number
+  timestamp?: number
+  message?: string
+  agent_id?: string | null
+  task_id?: string | null
+}
+
+export type RuntimeMetrics = {
+  global_metrics: RuntimeGlobalMetrics
+  department_metrics: DepartmentRuntimeMetrics[]
+  agent_workload: AgentWorkloadSummary[]
+  recent_manager_decisions: ManagerDecisionEntry[]
+  recent_failures: ManagerDecisionEntry[]
+  queue_health: QueueHealth
+}
+
 export type Agent = {
   id: string
   name: string

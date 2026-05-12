@@ -8,6 +8,10 @@ from app.runtime.project_runner import (
     get_runtime_status,
     get_runtime_logs,
 )
+from app.core.runtime_metrics import (
+    build_runtime_metrics,
+)
+from app.core.world import world
 
 router = APIRouter()
 
@@ -41,3 +45,8 @@ def runtime_status():
 @router.get("/runtime/logs")
 def runtime_logs():
     return get_runtime_logs()
+
+
+@router.get("/runtime/metrics")
+def runtime_metrics():
+    return build_runtime_metrics(world)

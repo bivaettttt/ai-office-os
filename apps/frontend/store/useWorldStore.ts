@@ -24,6 +24,7 @@ export type WorldStoreState = Pick<
   | "tasks"
   | "events"
   | "activity_log"
+  | "commands"
   | "socketConnected"
 >
 
@@ -96,6 +97,7 @@ export const useWorldStore = create<WorldStore>((set) => ({
   tasks: {},
   events: [],
   activity_log: [],
+  commands: {},
   socketConnected: false,
 
   setWorld: (world) =>

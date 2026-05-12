@@ -6,6 +6,7 @@ import time
 from app.models.agent import Agent
 from app.models.task import Task
 from app.models.department import Department
+from app.models.command import UserCommand
 
 
 class World:
@@ -21,6 +22,8 @@ class World:
         self.events: list[dict] = []
 
         self.activity_log: list[dict] = []
+
+        self.commands: Dict[str, UserCommand] = {}
 
     # =====================================================
     # AGENTS
@@ -77,6 +80,23 @@ class World:
 
         self.tasks[task.id] = task
 
+    # =====================================================
+    # COMMANDS
+    # =====================================================
+
+    def add_command(self, command: UserCommand):
+
+        self.commands[command.id] = command
+
+        if len(self.commands) > 100:
+            oldest = sorted(
+                self.commands.values(),
+                key=lambda item: item.created_at,
+            )[:-100]
+
+            for item in oldest:
+                self.commands.pop(item.id, None)
+
     def update_task(
         self,
         task_id: str,
@@ -128,6 +148,11 @@ class World:
             "activity_log",
             [],
         )[-500:]
+        self.commands = {
+            key: UserCommand.model_validate(value)
+            for key, value
+            in data.get("commands", {}).items()
+        }
 
     # =====================================================
     # EVENTS
@@ -199,6 +224,11 @@ class World:
             "events": self.events,
 
             "activity_log": self.activity_log,
+
+            "commands": {
+                k: v.model_dump(mode="json")
+                for k, v in self.commands.items()
+            },
         }
 
 

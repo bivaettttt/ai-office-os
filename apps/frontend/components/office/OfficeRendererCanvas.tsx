@@ -847,5 +847,21 @@ function eventToFeedText(
     return "Task queue overloaded"
   }
 
+  if (type === "command_received") {
+    return "Command received"
+  }
+
+  if (type === "command_routed") {
+    return `Command routed to ${payload.department || "department"}`
+  }
+
+  if (type === "command_task_created") {
+    return `Command created ${payload.task_title || "task"}`
+  }
+
+  if (type === "command_failed") {
+    return "Command failed"
+  }
+
   return type
 }

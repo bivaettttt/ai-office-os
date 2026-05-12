@@ -1,6 +1,6 @@
 'use client'
 
-import TaskPanel from '@/components/office/TaskPanel'
+import CommandCenter from '@/components/office/CommandCenter'
 import OfficeRendererCanvas from '@/components/office/OfficeRendererCanvas'
 
 import {
@@ -80,7 +80,7 @@ export default function Home() {
               Управление
             </div>
 
-            <TaskPanel />
+            <CommandCenter />
 
           </div>
 

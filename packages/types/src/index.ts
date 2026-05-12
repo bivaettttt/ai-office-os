@@ -34,6 +34,37 @@ export type TaskStepStatus =
   | "failed"
   | "skipped"
 
+export type CommandStatus =
+  | "received"
+  | "parsed"
+  | "routed"
+  | "task_created"
+  | "failed"
+
+export type UserCommand = {
+  id: string
+  raw_text: string
+  normalized_text: string
+  status: CommandStatus
+  inferred_department?: string | null
+  inferred_priority: string
+  inferred_capabilities: string[]
+  created_task_id?: string | null
+  created_at: number
+  processed_at?: number | null
+  error_message?: string | null
+}
+
+export type CommandRouteResult = {
+  department: string
+  priority: string
+  required_capabilities: string[]
+  title: string
+  description: string
+  explanation: string
+  matched_keywords: string[]
+}
+
 export type Agent = {
   id: string
   name: string
@@ -127,6 +158,11 @@ export type AgentActivityLogEntry = {
     | "task_retry_started"
     | "manager_review_approved"
     | "manager_review_failed"
+    | "command_received"
+    | "command_parsed"
+    | "command_routed"
+    | "command_task_created"
+    | "command_failed"
     | string
   message: string
 }
@@ -137,4 +173,5 @@ export type WorldState = {
   tasks: Record<string, Task>
   events: Array<string | Event | Record<string, unknown>>
   activity_log?: AgentActivityLogEntry[]
+  commands?: Record<string, UserCommand>
 }

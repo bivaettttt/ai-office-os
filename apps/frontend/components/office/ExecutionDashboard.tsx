@@ -218,6 +218,14 @@ function GlobalSummary({
         label="Managers"
         value={global.managers_count}
       />
+      <SummaryCard
+        label="Tool approvals"
+        value={global.pending_tool_approvals || 0}
+      />
+      <SummaryCard
+        label="Tool blocked"
+        value={global.blocked_tool_invocations || 0}
+      />
     </div>
   )
 }

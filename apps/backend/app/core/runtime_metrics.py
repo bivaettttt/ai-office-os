@@ -29,6 +29,7 @@ def build_runtime_metrics(world: World) -> dict:
     tasks = list(world.tasks.values())
     agents = list(world.agents.values())
     commands = list(world.commands.values())
+    tool_invocations = list(world.tool_invocations.values())
 
     queued_tasks = [
         task
@@ -112,6 +113,27 @@ def build_runtime_metrics(world: World) -> dict:
                 command
                 for command in commands
                 if command.status == "failed"
+            ]
+        ),
+        "pending_tool_approvals": len(
+            [
+                invocation
+                for invocation in tool_invocations
+                if invocation.status == "awaiting_approval"
+            ]
+        ),
+        "completed_tool_invocations": len(
+            [
+                invocation
+                for invocation in tool_invocations
+                if invocation.status == "completed"
+            ]
+        ),
+        "blocked_tool_invocations": len(
+            [
+                invocation
+                for invocation in tool_invocations
+                if invocation.status == "blocked"
             ]
         ),
     }

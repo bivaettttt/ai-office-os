@@ -26,6 +26,8 @@ WARNING_TYPES = {
     "task.paused",
     "task.cancelled",
     "task_retry_requested",
+    "tool_approval_required",
+    "tool_rejected",
 }
 
 MANAGER_TYPES = {
@@ -43,6 +45,15 @@ COMMAND_TYPES = {
     "command_routed",
     "command_task_created",
     "command_failed",
+}
+
+TOOL_TYPES = {
+    "tool_requested",
+    "tool_approval_required",
+    "tool_approved",
+    "tool_rejected",
+    "tool_executed",
+    "tool_blocked",
 }
 
 
@@ -287,6 +298,9 @@ def collect_timeline_entries(world: World) -> list[dict]:
             )
         )
 
+    for audit in world.tool_audit_log:
+        entries.append(tool_audit_entry(audit))
+
     return entries
 
 
@@ -381,10 +395,46 @@ def activity_entry(
     }
 
 
+def tool_audit_entry(
+    audit,
+) -> dict:
+    action_event_type = {
+        "requested": "tool_requested",
+        "policy_requires_approval": "tool_approval_required",
+        "policy_blocked": "tool_blocked",
+        "approved": "tool_approved",
+        "rejected": "tool_rejected",
+        "executed": "tool_executed",
+        "failed": "tool_blocked",
+    }.get(
+        str(audit.action),
+        f"tool_{audit.action}",
+    )
+
+    return {
+        "id": f"tool-audit-{audit.id}",
+        "timestamp": audit.timestamp,
+        "source_type": "system",
+        "source_id": audit.tool_id,
+        "event_type": action_event_type,
+        "title": action_event_type,
+        "message": audit.message,
+        "severity": severity_for(action_event_type),
+        "related_task_id": audit.task_id,
+        "related_command_id": None,
+        "related_agent_id": audit.agent_id,
+        "metadata": audit.model_dump(mode="json"),
+    }
+
+
 def severity_for(event_type: str) -> str:
     if event_type in ERROR_TYPES or "failed" in event_type:
         return "error"
+    if event_type in {"tool_blocked"}:
+        return "error"
     if event_type in SUCCESS_TYPES or "completed" in event_type:
+        return "success"
+    if event_type in {"tool_executed", "tool_approved"}:
         return "success"
     if event_type in WARNING_TYPES or "cancelled" in event_type:
         return "warning"
@@ -394,6 +444,8 @@ def severity_for(event_type: str) -> str:
 def source_for(event_type: str) -> str:
     if event_type in COMMAND_TYPES:
         return "command"
+    if event_type in TOOL_TYPES:
+        return "system"
     if event_type in MANAGER_TYPES or event_type.startswith("manager"):
         return "manager"
     if event_type.startswith("agent"):

@@ -115,6 +115,9 @@ export type RuntimeGlobalMetrics = {
   average_task_progress: number
   active_commands: number
   failed_commands: number
+  pending_tool_approvals?: number
+  completed_tool_invocations?: number
+  blocked_tool_invocations?: number
 }
 
 export type DepartmentRuntimeMetrics = {
@@ -213,6 +216,101 @@ export type RuntimeMetrics = {
   recent_manager_decisions: ManagerDecisionEntry[]
   recent_failures: ManagerDecisionEntry[]
   queue_health: QueueHealth
+}
+
+export type Permission =
+  | "read_project_files"
+  | "write_project_files"
+  | "run_tests"
+  | "run_shell_command"
+  | "access_network"
+  | "access_browser"
+  | "access_calendar"
+  | "access_messaging"
+  | "access_secrets"
+  | "modify_system"
+  | "create_report"
+  | "generate_content"
+
+export type RiskLevel =
+  | "low"
+  | "medium"
+  | "high"
+  | "critical"
+
+export type ToolCategory =
+  | "filesystem"
+  | "terminal"
+  | "browser"
+  | "network"
+  | "calendar"
+  | "messaging"
+  | "analysis"
+  | "generation"
+  | "system"
+
+export type PolicyDecision =
+  | "allowed"
+  | "requires_approval"
+  | "blocked"
+
+export type ToolPolicyDecision = {
+  decision: PolicyDecision
+  reason: string
+}
+
+export type ToolInvocationStatus =
+  | "requested"
+  | "awaiting_approval"
+  | "approved"
+  | "running"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "cancelled"
+
+export type ToolDefinition = {
+  id: string
+  name: string
+  description: string
+  category: ToolCategory
+  required_capabilities: string[]
+  required_permissions: Permission[]
+  risk_level: RiskLevel
+  enabled: boolean
+  requires_approval: boolean
+}
+
+export type ToolInvocation = {
+  id: string
+  tool_id: string
+  task_id?: string | null
+  agent_id?: string | null
+  requested_by: string
+  arguments: Record<string, unknown>
+  status: ToolInvocationStatus
+  policy_decision?: ToolPolicyDecision | null
+  approval_required: boolean
+  approved_by?: string | null
+  approved_at?: number | null
+  result?: Record<string, unknown> | null
+  error?: string | null
+  created_at: number
+  completed_at?: number | null
+}
+
+export type ToolAuditEntry = {
+  id: string
+  timestamp: number
+  invocation_id: string
+  tool_id: string
+  task_id?: string | null
+  agent_id?: string | null
+  action: string
+  decision?: PolicyDecision | null
+  message: string
+  risk_level: RiskLevel
+  permissions: Permission[]
 }
 
 export type Agent = {
@@ -324,4 +422,6 @@ export type WorldState = {
   events: Array<string | Event | Record<string, unknown>>
   activity_log?: AgentActivityLogEntry[]
   commands?: Record<string, UserCommand>
+  tool_invocations?: Record<string, ToolInvocation>
+  tool_audit_log?: ToolAuditEntry[]
 }

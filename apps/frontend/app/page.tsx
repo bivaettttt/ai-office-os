@@ -3,6 +3,7 @@
 import CommandCenter from '@/components/office/CommandCenter'
 import OfficeRendererCanvas from '@/components/office/OfficeRendererCanvas'
 import ExecutionDashboard from '@/components/office/ExecutionDashboard'
+import ToolApprovalPanel from '@/components/office/ToolApprovalPanel'
 
 import {
   useWorldStore,
@@ -112,6 +113,8 @@ export default function Home() {
           </div>
 
           <ExecutionDashboard />
+
+          <ToolApprovalPanel />
 
         </aside>
 

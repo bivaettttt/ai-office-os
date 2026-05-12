@@ -7,6 +7,10 @@ from app.models.agent import Agent
 from app.models.task import Task
 from app.models.department import Department
 from app.models.command import UserCommand
+from app.core.tools.permissions import (
+    ToolAuditEntry,
+    ToolInvocation,
+)
 
 
 class World:
@@ -24,6 +28,10 @@ class World:
         self.activity_log: list[dict] = []
 
         self.commands: Dict[str, UserCommand] = {}
+
+        self.tool_invocations: Dict[str, ToolInvocation] = {}
+
+        self.tool_audit_log: list[ToolAuditEntry] = []
 
     # =====================================================
     # AGENTS
@@ -117,6 +125,25 @@ class World:
         return task
 
     # =====================================================
+    # TOOLS
+    # =====================================================
+
+    def add_tool_invocation(
+        self,
+        invocation: ToolInvocation,
+    ):
+
+        self.tool_invocations[invocation.id] = invocation
+
+    def add_tool_audit(
+        self,
+        entry: ToolAuditEntry,
+    ):
+
+        self.tool_audit_log.append(entry)
+        self.tool_audit_log = self.tool_audit_log[-500:]
+
+    # =====================================================
     # HYDRATION
     # =====================================================
 
@@ -153,6 +180,15 @@ class World:
             for key, value
             in data.get("commands", {}).items()
         }
+        self.tool_invocations = {
+            key: ToolInvocation.model_validate(value)
+            for key, value
+            in data.get("tool_invocations", {}).items()
+        }
+        self.tool_audit_log = [
+            ToolAuditEntry.model_validate(value)
+            for value in data.get("tool_audit_log", [])
+        ][-500:]
 
     # =====================================================
     # EVENTS
@@ -229,6 +265,16 @@ class World:
                 k: v.model_dump(mode="json")
                 for k, v in self.commands.items()
             },
+
+            "tool_invocations": {
+                k: v.model_dump(mode="json")
+                for k, v in self.tool_invocations.items()
+            },
+
+            "tool_audit_log": [
+                item.model_dump(mode="json")
+                for item in self.tool_audit_log
+            ],
         }
 
 

@@ -65,6 +65,35 @@ export type CommandRouteResult = {
   matched_keywords: string[]
 }
 
+export type CommandValidationWarning = {
+  code: string
+  message: string
+}
+
+export type CommandConfidence = number
+
+export type CommandPreview = {
+  normalized_text: string
+  inferred_department: string
+  inferred_priority: string
+  inferred_capabilities: string[]
+  routing_explanation: string
+  proposed_title: string
+  proposed_description: string
+  proposed_steps: TaskStep[]
+  warnings: CommandValidationWarning[]
+  confidence_score: CommandConfidence
+  valid: boolean
+}
+
+export type CommandCreateRequest = {
+  text: string
+  department?: string | null
+  priority?: string | null
+  title?: string | null
+  description?: string | null
+}
+
 export type Agent = {
   id: string
   name: string

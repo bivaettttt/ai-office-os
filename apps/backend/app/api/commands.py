@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.commands import (
+    build_command_preview,
     normalize_command_text,
     route_user_command,
 )
@@ -31,6 +32,8 @@ class CreateCommandRequest(BaseModel):
     text: str
     priority: Optional[str] = None
     department: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
 
 
 def command_detail(command: UserCommand):
@@ -58,6 +61,27 @@ def command_detail(command: UserCommand):
     }
 
 
+@router.post("/preview")
+def preview_command(req: CreateCommandRequest):
+    try:
+        preview = build_command_preview(
+            req.text,
+            requested_department=req.department,
+            requested_priority=req.priority,
+            edited_title=req.title,
+            edited_description=req.description,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "preview": preview.model_dump(mode="json"),
+    }
+
+
 @router.post("")
 async def create_command(req: CreateCommandRequest):
     command = UserCommand(
@@ -79,6 +103,13 @@ async def create_command(req: CreateCommandRequest):
             req.text,
             requested_department=req.department,
             requested_priority=req.priority,
+        )
+        preview = build_command_preview(
+            req.text,
+            requested_department=req.department,
+            requested_priority=req.priority,
+            edited_title=req.title,
+            edited_description=req.description,
         )
         command.status = CommandStatus.PARSED
 
@@ -108,8 +139,8 @@ async def create_command(req: CreateCommandRequest):
         )
 
         task = create_task(
-            title=route.title,
-            description=route.description,
+            title=preview.proposed_title,
+            description=preview.proposed_description,
             department=route.department,
             priority=route.priority,
             required_capabilities=(

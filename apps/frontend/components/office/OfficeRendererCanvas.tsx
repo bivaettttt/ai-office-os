@@ -16,6 +16,7 @@ import { useWorldStore } from "@/store/useWorldStore"
 import type {
   AgentActivityLogEntry,
   Task,
+  TaskSummaryReasoningResponse,
   WorldState,
 } from "@ai-office/types"
 
@@ -54,6 +55,10 @@ export default function OfficeRendererCanvas() {
   const [activityFeed, setActivityFeed] =
     useState<ActivityFeedItem[]>([])
   const [selectedTaskId, setSelectedTaskId] =
+    useState<string | null>(null)
+  const [taskSummaryById, setTaskSummaryById] =
+    useState<Record<string, TaskSummaryReasoningResponse>>({})
+  const [taskSummaryLoadingId, setTaskSummaryLoadingId] =
     useState<string | null>(null)
 
   const socketConnected = useWorldStore(
@@ -349,6 +354,17 @@ export default function OfficeRendererCanvas() {
                   ]?.name
                 : undefined
           }
+          summary={taskSummaryById[selectedTask.id]}
+          summaryLoading={
+            taskSummaryLoadingId === selectedTask.id
+          }
+          onSummarize={() => {
+            void summarizeTask(
+              selectedTask.id,
+              setTaskSummaryLoadingId,
+              setTaskSummaryById
+            )
+          }}
         />
       )}
     </div>
@@ -365,6 +381,45 @@ async function controlTask(
       method: "POST",
     }
   )
+}
+
+async function summarizeTask(
+  taskId: string,
+  setLoading: (value: string | null) => void,
+  setSummaryById: (
+    updater: (
+      current: Record<
+        string,
+        TaskSummaryReasoningResponse
+      >
+    ) => Record<string, TaskSummaryReasoningResponse>
+  ) => void
+) {
+  setLoading(taskId)
+  try {
+    const response = await fetch(
+      `${frontendConfig.apiUrl}/llm/reasoning/task-summary`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ task_id: taskId }),
+      }
+    )
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(
+        data.detail || "Summary request failed"
+      )
+    }
+    setSummaryById((current) => ({
+      ...current,
+      [taskId]: data,
+    }))
+  } finally {
+    setLoading(null)
+  }
 }
 
 function AgentDetails({
@@ -584,6 +639,9 @@ function TaskDetails({
   assignedAgentName,
   managerName,
   onAction,
+  summary,
+  summaryLoading,
+  onSummarize,
 }: {
   task: Task
   assignedAgentName?: string
@@ -591,6 +649,9 @@ function TaskDetails({
   onAction: (
     action: "pause" | "resume" | "cancel" | "retry-step"
   ) => void
+  summary?: TaskSummaryReasoningResponse
+  summaryLoading: boolean
+  onSummarize: () => void
 }) {
   const phase = task.runtime_phase || task.status
   const canPause = phase === "executing"
@@ -694,6 +755,30 @@ function TaskDetails({
         >
           Retry step
         </TaskActionButton>
+      </div>
+
+      <div className="mt-3 border-t border-white/10 pt-3 text-xs">
+        <button
+          type="button"
+          onClick={onSummarize}
+          disabled={summaryLoading}
+          className="w-full border border-white/10 bg-white/5 px-3 py-2 text-left text-cyan-200 disabled:opacity-50"
+        >
+          {summaryLoading
+            ? "Generating AI summary..."
+            : "AI task summary"}
+        </button>
+        {summary && (
+          <div className="mt-2 rounded border border-white/10 bg-black/20 p-2 text-white/70">
+            <div className="mb-1 text-[11px] text-cyan-200">
+              {summary.provider_used}
+              {summary.fallback_used
+                ? " · fallback"
+                : ""}
+            </div>
+            <div>{summary.summary}</div>
+          </div>
+        )}
       </div>
 
       {task.steps && task.steps.length > 0 && (

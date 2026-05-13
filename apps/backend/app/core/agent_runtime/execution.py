@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+from app.config.settings import settings
 from app.models.task import (
     Task,
     TaskRuntimePhase,
@@ -143,6 +144,22 @@ def review_completed_task(
         f"Task completed by {agent_name}. "
         f"Plan executed successfully across {len(task.steps)} steps."
     )
+    if settings.LLM_REASONING_ENABLED:
+        try:
+            from app.core.llm.reasoning import (
+                LLMReasoningService,
+            )
+            from app.core.world import world
+
+            draft = LLMReasoningService(world).draft_manager_review(
+                task_title=task.title,
+                steps=[step.title for step in task.steps],
+                agent_name=agent_name,
+                result_summary=summary,
+            )
+            summary = draft["text"]
+        except Exception:
+            pass
     task.result_summary = summary
     task.result = summary
     return summary

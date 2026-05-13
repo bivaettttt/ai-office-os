@@ -84,6 +84,13 @@ export type CommandPreview = {
   warnings: CommandValidationWarning[]
   confidence_score: CommandConfidence
   valid: boolean
+  ai_explanation?: string | null
+  ai_improved_title?: string | null
+  ai_improved_description?: string | null
+  ai_plan_notes?: string | null
+  llm_provider_used?: string | null
+  llm_fallback_used?: boolean
+  llm_safety_flags?: LLMSafetyFlag[]
 }
 
 export type CommandCreateRequest = {
@@ -129,6 +136,9 @@ export type RuntimeGlobalMetrics = {
   sandbox_contracts_created?: number
   llm_requests_total?: number
   llm_requests_failed?: number
+  llm_reasoning_requests_total?: number
+  llm_reasoning_fallbacks_total?: number
+  llm_reasoning_blocked_total?: number
   llm_provider_active?: string
   llm_real_calls_enabled?: boolean
 }
@@ -452,6 +462,22 @@ export type LLMSafetyFlag =
   | "tool_execution_blocked"
   | "real_calls_disabled"
   | "provider_fallback_used"
+  | "invalid_json_fallback"
+  | "forbidden_purpose_blocked"
+
+export type LLMReasoningPurpose =
+  | "command_explanation"
+  | "command_preview_enhancement"
+  | "task_plan_draft"
+  | "manager_review_draft"
+  | "task_summary"
+  | "timeline_summary"
+
+export type ReasoningFallbackInfo = {
+  fallback_used: boolean
+  provider_used: string
+  safety_flags: LLMSafetyFlag[]
+}
 
 export type LLMMessage = {
   role: "system" | "user" | "assistant" | "tool"
@@ -497,6 +523,13 @@ export type LLMStatusResponse = {
   prompt_log_enabled: boolean
 }
 
+export type LLMReasoningStatus = {
+  reasoning_enabled: boolean
+  provider_status: LLMStatusResponse
+  allowed_purposes: LLMReasoningPurpose[]
+  blocked_purposes: string[]
+}
+
 export type LLMPromptLogEntry = {
   id: string
   timestamp: number
@@ -511,6 +544,21 @@ export type LLMPromptLogEntry = {
   safety_flags: LLMSafetyFlag[]
   status: string
   error?: string | null
+}
+
+export type CommandReasoningResponse = {
+  rules_routing: CommandRouteResult
+  llm_explanation: string
+  provider_used: string
+  safety_flags: LLMSafetyFlag[]
+  fallback_used: boolean
+}
+
+export type TaskSummaryReasoningResponse = {
+  summary: string
+  provider_used: string
+  safety_flags: LLMSafetyFlag[]
+  fallback_used: boolean
 }
 
 export type Agent = {

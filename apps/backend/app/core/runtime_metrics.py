@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 
 from app.config.settings import settings
+from app.core.llm.guardrails import ALLOWED_REASONING_PURPOSES
 from app.core.world import World
 
 
@@ -226,6 +227,40 @@ def build_runtime_metrics(world: World) -> dict:
                 entry
                 for entry in llm_logs
                 if entry.status in ["failed", "blocked"]
+            ]
+        ),
+        "llm_reasoning_requests_total": len(
+            [
+                entry
+                for entry in llm_logs
+                if entry.purpose
+                in ALLOWED_REASONING_PURPOSES
+            ]
+        ),
+        "llm_reasoning_fallbacks_total": len(
+            [
+                entry
+                for entry in llm_logs
+                if (
+                    entry.purpose
+                    in ALLOWED_REASONING_PURPOSES
+                    and any(
+                        getattr(flag, "value", flag)
+                        == "provider_fallback_used"
+                        for flag in entry.safety_flags
+                    )
+                )
+            ]
+        ),
+        "llm_reasoning_blocked_total": len(
+            [
+                entry
+                for entry in llm_logs
+                if (
+                    entry.purpose
+                    in ALLOWED_REASONING_PURPOSES
+                    and entry.status == "blocked"
+                )
             ]
         ),
         "llm_provider_active": (

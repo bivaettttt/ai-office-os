@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.agent_runtime.capabilities import (
     default_capabilities_for_department,
@@ -40,6 +40,13 @@ class CommandPreview(BaseModel):
     warnings: list[CommandValidationWarning]
     confidence_score: float
     valid: bool = True
+    ai_explanation: str | None = None
+    ai_improved_title: str | None = None
+    ai_improved_description: str | None = None
+    ai_plan_notes: str | None = None
+    llm_provider_used: str | None = None
+    llm_fallback_used: bool = False
+    llm_safety_flags: list[str] = Field(default_factory=list)
 
 
 DEPARTMENT_KEYWORDS: dict[str, list[str]] = {

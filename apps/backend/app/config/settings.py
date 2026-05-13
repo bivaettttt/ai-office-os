@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     LLM_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0)
     LLM_PROMPT_LOG_ENABLED: bool = True
     LLM_MAX_PROMPT_CHARS: int = Field(default=12000, gt=0)
+    LLM_REASONING_ENABLED: bool = False
 
     WORLD_SYNC_INTERVAL_SECONDS: float = Field(default=1.0, gt=0)
     PERSISTENCE_ENABLED: bool = True

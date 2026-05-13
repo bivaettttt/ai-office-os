@@ -28,6 +28,8 @@ class LLMSafetyFlag(StrEnum):
     TOOL_EXECUTION_BLOCKED = "tool_execution_blocked"
     REAL_CALLS_DISABLED = "real_calls_disabled"
     PROVIDER_FALLBACK_USED = "provider_fallback_used"
+    INVALID_JSON_FALLBACK = "invalid_json_fallback"
+    FORBIDDEN_PURPOSE_BLOCKED = "forbidden_purpose_blocked"
 
 
 class LLMMessage(BaseModel):

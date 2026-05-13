@@ -3,20 +3,27 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config.settings import settings
+from app.core.agent_runtime.execution import (
+    review_completed_task,
+)
 from app.core.llm.guardrails import (
     LLMGuardrailError,
     redact_text,
 )
 from app.core.llm.mock_provider import MockProvider
+from app.core.llm.reasoning import LLMReasoningService
 from app.core.llm.service import LLMService
 from app.core.llm.types import (
     LLMMessage,
     LLMMessageRole,
     LLMRequest,
+    LLMResponse,
     LLMSafetyFlag,
 )
+from app.core.runtime_metrics import build_runtime_metrics
 from app.core.world import World, world
 from app.main import app
+from app.models.task import Task, TaskStep
 
 
 def reset_global_world():
@@ -226,3 +233,250 @@ def test_llm_logs_api_shape():
     data = response.json()
     assert data["total"] == 1
     assert data["items"][0]["provider"] == "mock"
+
+
+def test_reasoning_status_api():
+    reset_global_world()
+    response = TestClient(app).get(
+        "/llm/reasoning/status"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "reasoning_enabled" in data
+    assert "provider_status" in data
+    assert "command_explanation" in data["allowed_purposes"]
+    assert "tool_execution" in data["blocked_purposes"]
+
+
+def test_command_explanation_uses_mock_by_default(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    monkeypatch.setattr(
+        settings,
+        "LLM_PROVIDER",
+        "mock",
+    )
+
+    response = TestClient(app).post(
+        "/llm/reasoning/command-explain",
+        json={"text": "сделай лендинг для кофейни"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["provider_used"] == "mock"
+    assert data["llm_explanation"]
+
+
+def test_ollama_unavailable_reasoning_falls_back_to_mock(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    monkeypatch.setattr(
+        settings,
+        "LLM_PROVIDER",
+        "ollama",
+    )
+
+    response = TestClient(app).post(
+        "/llm/reasoning/command-explain",
+        json={"text": "проанализируй рынок"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["provider_used"] == "mock"
+    assert data["fallback_used"] is True
+
+
+def test_invalid_json_fallback(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+
+    original_complete = MockProvider.complete
+
+    def broken_complete(self, request):
+        if request.purpose == "command_preview_enhancement":
+            return LLMResponse(
+                content="{invalid",
+                provider="mock",
+                model=self.default_model(),
+            )
+        return original_complete(self, request)
+
+    monkeypatch.setattr(
+        MockProvider,
+        "complete",
+        broken_complete,
+    )
+
+    response = TestClient(app).post(
+        "/commands/preview",
+        json={"text": "сделай лендинг для кофейни"},
+    )
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert preview["ai_improved_title"] == preview["proposed_title"]
+    assert "invalid_json_fallback" in preview["llm_safety_flags"]
+
+
+def test_manager_review_draft_fallback(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+
+    def broken_review(*args, **kwargs):
+        raise RuntimeError("reasoning failed")
+
+    monkeypatch.setattr(
+        LLMReasoningService,
+        "draft_manager_review",
+        broken_review,
+    )
+
+    task = Task(
+        title="Review test",
+        description="Review test description",
+        department="development",
+        steps=[
+            TaskStep(
+                title="Understand request",
+                description="",
+                status="completed",
+                progress=100,
+            )
+        ],
+    )
+    summary = review_completed_task(task, "Agent One")
+
+    assert "Task completed by Agent One." in summary
+
+
+def test_task_summary_endpoint(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+
+    task = Task(
+        title="Summary test",
+        description="Summary test description",
+        department="analytics",
+        status="in_progress",
+        progress=60,
+        steps=[
+            TaskStep(
+                title="Collect sources",
+                description="",
+                status="in_progress",
+                progress=60,
+            )
+        ],
+    )
+    world.add_task(task)
+
+    response = TestClient(app).post(
+        "/llm/reasoning/task-summary",
+        json={"task_id": task.id},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]
+    assert data["provider_used"] == "mock"
+
+
+def test_prompt_log_created_with_reasoning_purpose(
+    monkeypatch,
+):
+    test_world = World()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    result = LLMReasoningService(test_world).explain_command(
+        text="напиши пост",
+        department="content",
+        priority="normal",
+        capabilities=["content_writing"],
+        routing_explanation="Detected content intent.",
+    )
+
+    assert result["provider_used"] == "mock"
+    assert len(test_world.llm_prompt_logs) == 1
+    assert (
+        test_world.llm_prompt_logs[0].purpose
+        == "command_explanation"
+    )
+
+
+def test_reasoning_metrics_increment(
+    monkeypatch,
+):
+    test_world = World()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    LLMReasoningService(test_world).explain_command(
+        text="проанализируй рынок",
+        department="analytics",
+        priority="normal",
+        capabilities=["data_analysis"],
+        routing_explanation="Detected analytics intent.",
+    )
+
+    metrics = build_runtime_metrics(test_world)
+    assert (
+        metrics["global_metrics"]["llm_reasoning_requests_total"]
+        == 1
+    )
+
+
+def test_reasoning_does_not_invoke_tools(
+    monkeypatch,
+):
+    test_world = World()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    LLMReasoningService(test_world).explain_command(
+        text="сделай лендинг",
+        department="development",
+        priority="normal",
+        capabilities=["code_generation"],
+        routing_explanation="Detected development intent.",
+    )
+
+    assert test_world.tool_invocations == {}

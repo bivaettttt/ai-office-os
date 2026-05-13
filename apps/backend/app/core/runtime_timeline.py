@@ -19,6 +19,7 @@ SUCCESS_TYPES = {
     "task_completed",
     "manager_review_approved",
     "command_task_created",
+    "llm_reasoning_completed",
 }
 
 WARNING_TYPES = {
@@ -41,6 +42,8 @@ WARNING_TYPES = {
     "sandbox_contract_blocked",
     "llm_provider_fallback_used",
     "llm_guardrail_blocked",
+    "llm_reasoning_fallback_used",
+    "llm_reasoning_blocked",
 }
 
 MANAGER_TYPES = {
@@ -81,6 +84,10 @@ LLM_TYPES = {
     "llm_request_failed",
     "llm_provider_fallback_used",
     "llm_guardrail_blocked",
+    "llm_reasoning_started",
+    "llm_reasoning_completed",
+    "llm_reasoning_fallback_used",
+    "llm_reasoning_blocked",
 }
 
 

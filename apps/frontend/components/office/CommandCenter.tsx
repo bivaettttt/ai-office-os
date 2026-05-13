@@ -334,6 +334,12 @@ function PreviewCard({
   onTitle: (value: string) => void
   onDescription: (value: string) => void
 }) {
+  const providerLabel =
+    preview.llm_provider_used &&
+    preview.llm_provider_used !== "rules"
+      ? preview.llm_provider_used
+      : "rules"
+
   return (
     <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-500/10 p-3 text-xs text-white/80">
       <div className="grid grid-cols-[78px_1fr] gap-y-1">
@@ -348,6 +354,13 @@ function PreviewCard({
         <span className="text-white/45">Caps</span>
         <span>
           {preview.inferred_capabilities.join(", ")}
+        </span>
+        <span className="text-white/45">LLM</span>
+        <span>
+          {providerLabel}
+          {preview.llm_fallback_used
+            ? " · fallback"
+            : ""}
         </span>
       </div>
 
@@ -379,6 +392,61 @@ function PreviewCard({
       <div className="mt-2 text-white/55">
         {preview.routing_explanation}
       </div>
+
+      {(preview.ai_explanation ||
+        preview.ai_improved_title ||
+        preview.ai_improved_description ||
+        preview.ai_plan_notes) && (
+        <div className="mt-3 border-t border-white/10 pt-2">
+          <div className="mb-1 flex items-center justify-between gap-2 text-white/60">
+            <span>AI reasoning</span>
+            <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-cyan-200">
+              {providerLabel}
+            </span>
+          </div>
+
+          {preview.ai_explanation && (
+            <div className="text-white/75">
+              {preview.ai_explanation}
+            </div>
+          )}
+
+          {preview.ai_improved_title && (
+            <div className="mt-2">
+              <div className="text-white/45">
+                Suggested title
+              </div>
+              <div className="text-white/75">
+                {preview.ai_improved_title}
+              </div>
+            </div>
+          )}
+
+          {preview.ai_improved_description && (
+            <div className="mt-2">
+              <div className="text-white/45">
+                Suggested description
+              </div>
+              <div className="text-white/75">
+                {preview.ai_improved_description}
+              </div>
+            </div>
+          )}
+
+          {preview.ai_plan_notes && (
+            <div className="mt-2 text-white/65">
+              {preview.ai_plan_notes}
+            </div>
+          )}
+
+          {preview.llm_safety_flags &&
+            preview.llm_safety_flags.length > 0 && (
+              <div className="mt-2 text-[11px] text-amber-200">
+                {preview.llm_safety_flags.join(", ")}
+              </div>
+            )}
+        </div>
+      )}
 
       <div className="mt-3 border-t border-white/10 pt-2">
         <div className="mb-1 text-white/60">

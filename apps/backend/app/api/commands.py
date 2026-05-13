@@ -15,6 +15,7 @@ from app.core.runtime_timeline import (
     build_runtime_timeline,
 )
 from app.core.factory import create_task
+from app.core.llm.reasoning import LLMReasoningService
 from app.core.world import world
 from app.models.command import (
     CommandStatus,
@@ -91,9 +92,54 @@ def preview_command(req: CreateCommandRequest):
             detail=str(exc),
         ) from exc
 
-    return {
-        "preview": preview.model_dump(mode="json"),
-    }
+    preview_payload = preview.model_dump(mode="json")
+    reasoning = LLMReasoningService(world)
+    explain_result = reasoning.explain_command(
+        text=req.text,
+        department=preview.inferred_department,
+        priority=preview.inferred_priority,
+        capabilities=preview.inferred_capabilities,
+        routing_explanation=preview.routing_explanation,
+    )
+    enhancement_result = reasoning.enhance_command_preview(
+        text=req.text,
+        current_title=preview.proposed_title,
+        current_description=preview.proposed_description,
+        current_plan=[
+            step["title"]
+            for step in preview.proposed_steps
+        ],
+    )
+
+    preview_payload["ai_explanation"] = explain_result["text"]
+    preview_payload["ai_improved_title"] = enhancement_result.get(
+        "improved_title"
+    )
+    preview_payload["ai_improved_description"] = enhancement_result.get(
+        "improved_description"
+    )
+    preview_payload["ai_plan_notes"] = enhancement_result.get(
+        "plan_notes"
+    )
+    preview_payload["llm_provider_used"] = (
+        enhancement_result.get("provider_used")
+        if enhancement_result.get("provider_used") != "rules"
+        else explain_result.get("provider_used")
+    )
+    preview_payload["llm_fallback_used"] = bool(
+        explain_result.get("fallback_used")
+        or enhancement_result.get("fallback_used")
+    )
+    preview_payload["llm_safety_flags"] = sorted(
+        set(
+            [
+                *explain_result.get("safety_flags", []),
+                *enhancement_result.get("safety_flags", []),
+            ]
+        )
+    )
+
+    return {"preview": preview_payload}
 
 
 @router.post("")

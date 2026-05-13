@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.config.settings import settings
 from app.core.commands import (
     build_command_preview,
     infer_priority,
@@ -161,6 +162,36 @@ def test_preview_returns_proposed_task():
         "напиши пост для Telegram"
     )
     assert preview.proposed_steps
+
+
+def test_reasoning_disabled_keeps_preview_rules_based(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        False,
+    )
+    baseline = build_command_preview(
+        "напиши пост для Telegram"
+    )
+    response = TestClient(app).post(
+        "/commands/preview",
+        json={
+            "text": "напиши пост для Telegram",
+        },
+    )
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert preview["proposed_title"] == baseline.proposed_title
+    assert (
+        preview["proposed_description"]
+        == baseline.proposed_description
+    )
+    assert preview["llm_provider_used"] == "rules"
+    assert preview["llm_fallback_used"] is True
 
 
 def test_confidence_score():

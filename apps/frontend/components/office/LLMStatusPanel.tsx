@@ -8,6 +8,7 @@ import {
 import { frontendConfig } from "@/lib/config"
 import type {
   LLMPromptLogEntry,
+  LLMReasoningStatus,
   LLMResponse,
   LLMStatusResponse,
 } from "@ai-office/types"
@@ -17,6 +18,8 @@ export default function LLMStatusPanel() {
     useState<LLMStatusResponse | null>(null)
   const [logs, setLogs] =
     useState<LLMPromptLogEntry[]>([])
+  const [reasoningStatus, setReasoningStatus] =
+    useState<LLMReasoningStatus | null>(null)
   const [prompt, setPrompt] =
     useState("Summarize current office status")
   const [response, setResponse] =
@@ -25,19 +28,25 @@ export default function LLMStatusPanel() {
     useState("")
 
   async function loadStatus() {
-    const [statusResponse, logsResponse] =
+    const [
+      statusResponse,
+      logsResponse,
+      reasoningResponse,
+    ] =
       await Promise.all([
         fetch(`${frontendConfig.apiUrl}/llm/status`),
         fetch(`${frontendConfig.apiUrl}/llm/logs?limit=6`),
+        fetch(`${frontendConfig.apiUrl}/llm/reasoning/status`),
       ])
 
-    if (!statusResponse.ok || !logsResponse.ok) {
+    if (!statusResponse.ok || !logsResponse.ok || !reasoningResponse.ok) {
       throw new Error("Failed to load LLM status")
     }
 
     setStatus(await statusResponse.json())
     const logsData = await logsResponse.json()
     setLogs(logsData.items)
+    setReasoningStatus(await reasoningResponse.json())
   }
 
   useEffect(() => {
@@ -118,6 +127,12 @@ export default function LLMStatusPanel() {
           <div>
             prompt log:{" "}
             {status.prompt_log_enabled ? "enabled" : "disabled"}
+          </div>
+          <div>
+            reasoning:{" "}
+            {reasoningStatus?.reasoning_enabled
+              ? "enabled"
+              : "disabled"}
           </div>
         </div>
       )}

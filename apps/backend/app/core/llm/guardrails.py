@@ -15,6 +15,24 @@ SECRET_PATTERNS = [
     re.compile(r"password=[^\s]+", re.IGNORECASE),
 ]
 
+FORBIDDEN_PURPOSES = {
+    "tool_execution",
+    "shell_execution",
+    "file_write",
+    "browser_action",
+    "autonomous_action",
+    "secret_access",
+}
+
+ALLOWED_REASONING_PURPOSES = {
+    "command_explanation",
+    "command_preview_enhancement",
+    "task_plan_draft",
+    "manager_review_draft",
+    "task_summary",
+    "timeline_summary",
+}
+
 
 class LLMGuardrailError(Exception):
     def __init__(
@@ -32,10 +50,13 @@ def validate_request(
     prompt_text = joined_prompt(request)
     flags: list[LLMSafetyFlag] = []
 
-    if request.purpose == "tool_execution":
+    if request.purpose in FORBIDDEN_PURPOSES:
         raise LLMGuardrailError(
-            "LLM tool execution purpose is blocked at this stage.",
-            [LLMSafetyFlag.TOOL_EXECUTION_BLOCKED],
+            "LLM forbidden purpose is blocked at this stage.",
+            [
+                LLMSafetyFlag.TOOL_EXECUTION_BLOCKED,
+                LLMSafetyFlag.FORBIDDEN_PURPOSE_BLOCKED,
+            ],
         )
 
     if not prompt_text.strip():

@@ -13,6 +13,7 @@ from app.core.tools.permissions import (
     ToolInvocation,
 )
 from app.core.tools.sandbox import SandboxContract
+from app.core.llm.types import LLMPromptLogEntry
 
 
 class World:
@@ -38,6 +39,8 @@ class World:
         self.permission_grants: Dict[str, PermissionGrant] = {}
 
         self.sandbox_contracts: Dict[str, SandboxContract] = {}
+
+        self.llm_prompt_logs: list[LLMPromptLogEntry] = []
 
     # =====================================================
     # AGENTS
@@ -164,6 +167,18 @@ class World:
         self.sandbox_contracts[contract.id] = contract
 
     # =====================================================
+    # LLM
+    # =====================================================
+
+    def add_llm_prompt_log(
+        self,
+        entry: LLMPromptLogEntry,
+    ):
+
+        self.llm_prompt_logs.append(entry)
+        self.llm_prompt_logs = self.llm_prompt_logs[-500:]
+
+    # =====================================================
     # HYDRATION
     # =====================================================
 
@@ -219,6 +234,10 @@ class World:
             for key, value
             in data.get("sandbox_contracts", {}).items()
         }
+        self.llm_prompt_logs = [
+            LLMPromptLogEntry.model_validate(value)
+            for value in data.get("llm_prompt_logs", [])
+        ][-500:]
 
     # =====================================================
     # EVENTS
@@ -315,6 +334,11 @@ class World:
                 k: v.model_dump(mode="json")
                 for k, v in self.sandbox_contracts.items()
             },
+
+            "llm_prompt_logs": [
+                item.model_dump(mode="json")
+                for item in self.llm_prompt_logs
+            ],
         }
 
 

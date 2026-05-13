@@ -31,6 +31,30 @@ cp .env.example apps/backend/.env
 
 For frontend overrides, use `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL` in `apps/frontend/.env.local`.
 
+### LLM Provider Layer
+
+The LLM layer is isolated from tools and execution. Only local Ollama is
+supported as a real provider. The safe mock provider is used by default for
+tests and fallback:
+
+```bash
+LLM_PROVIDER=mock
+LLM_REAL_CALLS_ENABLED=false
+LLM_PROMPT_LOG_ENABLED=true
+LLM_MAX_PROMPT_CHARS=12000
+```
+
+Local Ollama configuration:
+
+```bash
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b
+```
+
+External LLM providers are intentionally not supported. Prompt logs store
+previews only and redact obvious secrets.
+
 ## Development Commands
 
 Run both apps locally:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+from app.config.settings import settings
 from app.core.world import World
 
 
@@ -32,6 +33,7 @@ def build_runtime_metrics(world: World) -> dict:
     tool_invocations = list(world.tool_invocations.values())
     grants = list(world.permission_grants.values())
     audit_entries = list(world.tool_audit_log)
+    llm_logs = list(world.llm_prompt_logs)
     pending_approvals_by_risk = {
         "low": 0,
         "medium": 0,
@@ -218,6 +220,20 @@ def build_runtime_metrics(world: World) -> dict:
             ]
         ),
         "sandbox_contracts_created": len(world.sandbox_contracts),
+        "llm_requests_total": len(llm_logs),
+        "llm_requests_failed": len(
+            [
+                entry
+                for entry in llm_logs
+                if entry.status in ["failed", "blocked"]
+            ]
+        ),
+        "llm_provider_active": (
+            llm_logs[-1].provider
+            if llm_logs
+            else "mock"
+        ),
+        "llm_real_calls_enabled": settings.LLM_REAL_CALLS_ENABLED,
     }
 
     department_metrics = [

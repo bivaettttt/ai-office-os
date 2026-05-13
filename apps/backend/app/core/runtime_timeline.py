@@ -39,6 +39,8 @@ WARNING_TYPES = {
     "dry_run_completed",
     "sandbox_contract_created",
     "sandbox_contract_blocked",
+    "llm_provider_fallback_used",
+    "llm_guardrail_blocked",
 }
 
 MANAGER_TYPES = {
@@ -71,6 +73,14 @@ TOOL_TYPES = {
     "policy_profile_applied",
     "scoped_permission_allowed",
     "scoped_permission_missing",
+}
+
+LLM_TYPES = {
+    "llm_request_started",
+    "llm_request_completed",
+    "llm_request_failed",
+    "llm_provider_fallback_used",
+    "llm_guardrail_blocked",
 }
 
 
@@ -318,6 +328,9 @@ def collect_timeline_entries(world: World) -> list[dict]:
     for audit in world.tool_audit_log:
         entries.append(tool_audit_entry(audit))
 
+    for log in world.llm_prompt_logs:
+        entries.append(llm_log_entry(log))
+
     return entries
 
 
@@ -458,9 +471,39 @@ def tool_audit_entry(
     }
 
 
+def llm_log_entry(
+    log,
+) -> dict:
+    event_type = (
+        "llm_request_completed"
+        if log.status == "completed"
+        else (
+            "llm_guardrail_blocked"
+            if log.status == "blocked"
+            else "llm_request_failed"
+        )
+    )
+    return {
+        "id": f"llm-log-{log.id}",
+        "timestamp": log.timestamp,
+        "source_type": "system",
+        "source_id": log.provider,
+        "event_type": event_type,
+        "title": event_type,
+        "message": log.response_preview or log.error or log.prompt_preview,
+        "severity": severity_for(event_type),
+        "related_task_id": log.task_id,
+        "related_command_id": log.command_id,
+        "related_agent_id": log.agent_id,
+        "metadata": log.model_dump(mode="json"),
+    }
+
+
 def severity_for(event_type: str) -> str:
     if event_type in ERROR_TYPES or "failed" in event_type:
         return "error"
+    if event_type == "llm_guardrail_blocked":
+        return "warning"
     if event_type in {"tool_blocked"}:
         return "error"
     if event_type in SUCCESS_TYPES or "completed" in event_type:
@@ -486,6 +529,8 @@ def severity_for(event_type: str) -> str:
 def source_for(event_type: str) -> str:
     if event_type in COMMAND_TYPES:
         return "command"
+    if event_type in LLM_TYPES:
+        return "system"
     if event_type in TOOL_TYPES:
         return "system"
     if event_type in MANAGER_TYPES or event_type.startswith("manager"):

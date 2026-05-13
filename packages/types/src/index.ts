@@ -127,6 +127,10 @@ export type RuntimeGlobalMetrics = {
   approvals_rejected_total?: number
   dry_run_invocations_total?: number
   sandbox_contracts_created?: number
+  llm_requests_total?: number
+  llm_requests_failed?: number
+  llm_provider_active?: string
+  llm_real_calls_enabled?: boolean
 }
 
 export type DepartmentRuntimeMetrics = {
@@ -441,6 +445,74 @@ export type ApprovalDetail = {
   timeline?: RuntimeTimelineEntry[]
 }
 
+export type LLMSafetyFlag =
+  | "empty_prompt_blocked"
+  | "prompt_too_long_blocked"
+  | "secret_redacted"
+  | "tool_execution_blocked"
+  | "real_calls_disabled"
+  | "provider_fallback_used"
+
+export type LLMMessage = {
+  role: "system" | "user" | "assistant" | "tool"
+  content: string
+  name?: string | null
+}
+
+export type LLMRequest = {
+  messages: LLMMessage[]
+  model?: string | null
+  temperature: number
+  max_tokens?: number | null
+  purpose: string
+  task_id?: string | null
+  agent_id?: string | null
+  command_id?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export type LLMResponse = {
+  content: string
+  provider: string
+  model: string
+  usage?: Record<string, unknown> | null
+  finish_reason?: string | null
+  safety_flags: LLMSafetyFlag[]
+  created_at: number
+}
+
+export type LLMProviderStatus = {
+  name: string
+  available: boolean
+  model?: string | null
+  reason?: string | null
+}
+
+export type LLMStatusResponse = {
+  selected_provider: string
+  active_provider: string
+  real_calls_enabled: boolean
+  providers: LLMProviderStatus[]
+  model_config: Record<string, unknown>
+  prompt_log_enabled: boolean
+}
+
+export type LLMPromptLogEntry = {
+  id: string
+  timestamp: number
+  provider: string
+  model: string
+  purpose: string
+  task_id?: string | null
+  agent_id?: string | null
+  command_id?: string | null
+  prompt_preview: string
+  response_preview: string
+  safety_flags: LLMSafetyFlag[]
+  status: string
+  error?: string | null
+}
+
 export type Agent = {
   id: string
   name: string
@@ -554,4 +626,5 @@ export type WorldState = {
   tool_audit_log?: ToolAuditEntry[]
   permission_grants?: Record<string, PermissionGrant>
   sandbox_contracts?: Record<string, SandboxContract>
+  llm_prompt_logs?: LLMPromptLogEntry[]
 }

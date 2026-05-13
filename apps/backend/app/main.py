@@ -13,6 +13,7 @@ from app.api.tasks import router as tasks_router
 from app.api.commands import router as commands_router
 from app.api.tools import router as tools_router
 from app.api.approvals import router as approvals_router
+from app.api.llm import router as llm_router
 
 from app.agents.manager_agent import ManagerAgent
 from app.agents.debug_agent import fix_traceback
@@ -148,6 +149,7 @@ app.include_router(tasks_router)
 app.include_router(commands_router)
 app.include_router(tools_router)
 app.include_router(approvals_router)
+app.include_router(llm_router)
 
 # =========================================================
 # BOOTSTRAP

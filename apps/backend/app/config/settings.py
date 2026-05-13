@@ -27,6 +27,16 @@ class Settings(BaseSettings):
 
     OLLAMA_MODEL: str = "qwen2.5:7b"
     OLLAMA_URL: str = "http://localhost:11434"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    LLM_PROVIDER: Literal[
+        "mock",
+        "ollama",
+    ] = "mock"
+    LLM_REAL_CALLS_ENABLED: bool = False
+    LLM_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0)
+    LLM_PROMPT_LOG_ENABLED: bool = True
+    LLM_MAX_PROMPT_CHARS: int = Field(default=12000, gt=0)
 
     WORLD_SYNC_INTERVAL_SECONDS: float = Field(default=1.0, gt=0)
     PERSISTENCE_ENABLED: bool = True

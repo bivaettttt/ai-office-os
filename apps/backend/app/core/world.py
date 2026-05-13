@@ -12,6 +12,7 @@ from app.core.tools.permissions import (
     ToolAuditEntry,
     ToolInvocation,
 )
+from app.core.tools.sandbox import SandboxContract
 
 
 class World:
@@ -35,6 +36,8 @@ class World:
         self.tool_audit_log: list[ToolAuditEntry] = []
 
         self.permission_grants: Dict[str, PermissionGrant] = {}
+
+        self.sandbox_contracts: Dict[str, SandboxContract] = {}
 
     # =====================================================
     # AGENTS
@@ -153,6 +156,13 @@ class World:
 
         self.permission_grants[grant.id] = grant
 
+    def add_sandbox_contract(
+        self,
+        contract: SandboxContract,
+    ):
+
+        self.sandbox_contracts[contract.id] = contract
+
     # =====================================================
     # HYDRATION
     # =====================================================
@@ -203,6 +213,11 @@ class World:
             key: PermissionGrant.model_validate(value)
             for key, value
             in data.get("permission_grants", {}).items()
+        }
+        self.sandbox_contracts = {
+            key: SandboxContract.model_validate(value)
+            for key, value
+            in data.get("sandbox_contracts", {}).items()
         }
 
     # =====================================================
@@ -294,6 +309,11 @@ class World:
             "permission_grants": {
                 k: v.model_dump(mode="json")
                 for k, v in self.permission_grants.items()
+            },
+
+            "sandbox_contracts": {
+                k: v.model_dump(mode="json")
+                for k, v in self.sandbox_contracts.items()
             },
         }
 

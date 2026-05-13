@@ -14,6 +14,10 @@ from app.core.tools.permissions import (
 )
 from app.core.tools.policy import ExecutionPolicy
 from app.core.tools.registry import ToolRegistry, tool_registry
+from app.core.tools.sandbox import (
+    build_dry_run_result,
+    build_sandbox_contract,
+)
 from app.core.tools.stubs import STUB_TOOL_HANDLERS
 from app.core.world import World
 
@@ -37,6 +41,7 @@ class ToolExecutor:
         task_id: str | None = None,
         agent_id: str | None = None,
         department: str | None = None,
+        dry_run: bool = False,
     ) -> ToolInvocation:
         tool = self.registry.get(tool_id)
         resolved_department = department or self._department_for(
@@ -50,6 +55,7 @@ class ToolExecutor:
             department=resolved_department,
             requested_by=requested_by,
             arguments=arguments or {},
+            dry_run=dry_run,
         )
         self.world.add_tool_invocation(invocation)
 
@@ -97,6 +103,15 @@ class ToolExecutor:
             invocation.error = decision.reason
             invocation.completed_at = time.time()
             self.world.add_tool_invocation(invocation)
+            if dry_run:
+                record_tool_audit(
+                    self.world,
+                    invocation,
+                    tool,
+                    ToolAuditAction.SANDBOX_CONTRACT_BLOCKED,
+                    "Sandbox contract blocked by policy decision.",
+                    decision.decision,
+                )
             record_tool_audit(
                 self.world,
                 invocation,
@@ -106,6 +121,9 @@ class ToolExecutor:
                 decision.decision,
             )
             return invocation
+
+        if dry_run:
+            return self._dry_run(invocation)
 
         if decision.decision == PolicyDecisionValue.REQUIRES_APPROVAL:
             invocation.status = (
@@ -153,12 +171,73 @@ class ToolExecutor:
         )
         return self._execute(invocation)
 
+    def _dry_run(
+        self,
+        invocation: ToolInvocation,
+    ) -> ToolInvocation:
+        tool = self.registry.get(invocation.tool_id)
+        if tool is None:
+            invocation.status = ToolInvocationStatus.BLOCKED
+            invocation.error = "Unknown tool id."
+            invocation.completed_at = time.time()
+            self.world.add_tool_invocation(invocation)
+            return invocation
+
+        record_tool_audit(
+            self.world,
+            invocation,
+            tool,
+            ToolAuditAction.DRY_RUN_REQUESTED,
+            "Dry-run requested for tool invocation.",
+            invocation.policy_decision.decision
+            if invocation.policy_decision
+            else None,
+        )
+        contract = build_sandbox_contract(tool)
+        self.world.add_sandbox_contract(contract)
+        invocation.sandbox_contract_id = contract.id
+        self.world.add_tool_invocation(invocation)
+        record_tool_audit(
+            self.world,
+            invocation,
+            tool,
+            ToolAuditAction.SANDBOX_CONTRACT_CREATED,
+            f"Sandbox contract created: {contract.id}.",
+            invocation.policy_decision.decision
+            if invocation.policy_decision
+            else None,
+        )
+
+        result = build_dry_run_result(
+            invocation.id,
+            tool,
+            contract,
+            invocation.arguments,
+        )
+        invocation.result = result.model_dump(mode="json")
+        invocation.status = ToolInvocationStatus.COMPLETED
+        invocation.completed_at = time.time()
+        self.world.add_tool_invocation(invocation)
+        record_tool_audit(
+            self.world,
+            invocation,
+            tool,
+            ToolAuditAction.DRY_RUN_COMPLETED,
+            "Dry-run completed without executing the tool.",
+            invocation.policy_decision.decision
+            if invocation.policy_decision
+            else None,
+        )
+        return invocation
+
     def approve(
         self,
         invocation_id: str,
         approved_by: str = "user",
         create_grant: bool = False,
         grant_expires_in_minutes: int | None = None,
+        grant_scope_type: PermissionScopeType | None = None,
+        grant_scope_id: str | None = None,
     ) -> ToolInvocation | None:
         invocation = self.world.tool_invocations.get(invocation_id)
         if invocation is None:
@@ -193,12 +272,32 @@ class ToolExecutor:
             if invocation.policy_decision
             else None,
         )
+        record_tool_audit(
+            self.world,
+            invocation,
+            tool,
+            (
+                ToolAuditAction.APPROVAL_GRANT_APPROVED
+                if create_grant
+                else ToolAuditAction.APPROVAL_ONCE_APPROVED
+            ),
+            (
+                "Tool invocation approved with scoped grant."
+                if create_grant
+                else "Tool invocation approved once."
+            ),
+            invocation.policy_decision.decision
+            if invocation.policy_decision
+            else None,
+        )
         if create_grant:
             created_grants = self.create_grants_for_invocation(
                 invocation,
                 tool,
                 granted_by=approved_by,
                 expires_in_minutes=grant_expires_in_minutes,
+                scope_type_override=grant_scope_type,
+                scope_id_override=grant_scope_id,
             )
             invocation.used_grant_ids = [
                 grant.id
@@ -310,10 +409,15 @@ class ToolExecutor:
         tool,
         granted_by: str,
         expires_in_minutes: int | None = None,
+        scope_type_override: PermissionScopeType | None = None,
+        scope_id_override: str | None = None,
     ) -> list[PermissionGrant]:
         scope_type = PermissionScopeType.GLOBAL
         scope_id = None
-        if invocation.agent_id:
+        if scope_type_override:
+            scope_type = scope_type_override
+            scope_id = scope_id_override
+        elif invocation.agent_id:
             scope_type = PermissionScopeType.AGENT
             scope_id = invocation.agent_id
         elif invocation.task_id:

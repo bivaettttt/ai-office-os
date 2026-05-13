@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.tools.executor import ToolExecutor
+from app.core.tools.approvals import suggested_approval_scopes
 from app.core.tools.permissions import (
     Permission,
     PermissionGrant,
@@ -11,11 +12,16 @@ from app.core.tools.permissions import (
     PolicyProfile,
     RiskLevel,
     ToolAuditAction,
+    ToolCategory,
+    ToolDefinition,
     ToolInvocationStatus,
     validate_permissions,
 )
 from app.core.tools.policy import ExecutionPolicy
 from app.core.tools.registry import tool_registry
+from app.core.tools.sandbox import build_sandbox_contract
+from app.core.runtime_metrics import build_runtime_metrics
+from app.core.runtime_timeline import build_runtime_timeline
 from app.core.world import World, world
 from app.main import app
 
@@ -32,6 +38,7 @@ def reset_global_world():
             "tool_invocations": {},
             "tool_audit_log": [],
             "permission_grants": {},
+            "sandbox_contracts": {},
         }
     )
 
@@ -405,3 +412,263 @@ def test_audit_entries_for_grants():
     )
 
     assert world.tool_audit_log[-1].action == "grant_created"
+
+
+def test_approvals_list_api():
+    reset_global_world()
+    client = TestClient(app)
+    client.post(
+        "/tools/invoke",
+        json={
+            "tool_id": "run_tests_stub",
+        },
+    )
+
+    response = client.get("/approvals")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["items"][0]["tool"]["id"] == "run_tests_stub"
+
+
+def test_approval_detail_api():
+    reset_global_world()
+    client = TestClient(app)
+    invocation = client.post(
+        "/tools/invoke",
+        json={
+            "tool_id": "run_tests_stub",
+            "task_id": "task-1",
+        },
+    ).json()
+
+    response = client.get(
+        f"/approvals/{invocation['id']}"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["invocation"]["id"] == invocation["id"]
+    assert data["required_permissions"] == ["run_tests"]
+    assert data["suggested_approval_scopes"]
+
+
+def test_suggested_scopes_low_medium_high_critical():
+    low_invocation = ToolExecutor(World()).invoke(
+        "generate_report_stub",
+        task_id="task-1",
+        agent_id="agent-1",
+    )
+    low_tool = tool_registry.get("generate_report_stub")
+    medium_tool = tool_registry.get("run_tests_stub")
+    high_tool = tool_registry.get("web_research_stub")
+    critical_tool = ToolDefinition(
+        id="critical_stub",
+        name="Critical",
+        description="Critical",
+        category=ToolCategory.SYSTEM,
+        required_permissions=[Permission.MODIFY_SYSTEM],
+        risk_level=RiskLevel.CRITICAL,
+    )
+
+    assert {
+        scope["scope_type"]
+        for scope in suggested_approval_scopes(
+            low_invocation,
+            low_tool,
+        )
+    } >= {"once", "task", "agent"}
+    assert [
+        scope["scope_type"]
+        for scope in suggested_approval_scopes(
+            low_invocation,
+            medium_tool,
+        )
+    ] == ["once", "task"]
+    assert [
+        scope["scope_type"]
+        for scope in suggested_approval_scopes(
+            low_invocation,
+            high_tool,
+        )
+    ] == ["once"]
+    assert (
+        suggested_approval_scopes(
+            low_invocation,
+            critical_tool,
+        )
+        == []
+    )
+
+
+def test_sandbox_contract_creation():
+    tool = tool_registry.get("run_tests_stub")
+    contract = build_sandbox_contract(tool)
+
+    assert contract.tool_id == "run_tests_stub"
+    assert contract.requires_dry_run is True
+    assert "run_command" in contract.denied_operations
+
+
+def test_dry_run_does_not_execute_tool():
+    test_world = World()
+    invocation = ToolExecutor(test_world).invoke(
+        "run_tests_stub",
+        dry_run=True,
+    )
+
+    assert invocation.status == ToolInvocationStatus.COMPLETED
+    assert invocation.dry_run is True
+    assert invocation.result["status"] == "dry_run_completed"
+    assert invocation.result["side_effects_performed"] == []
+    assert "simulated_pass" not in str(invocation.result)
+
+
+def test_dry_run_returns_execution_plan():
+    test_world = World()
+    invocation = ToolExecutor(test_world).invoke(
+        "generate_report_stub",
+        arguments={
+            "topic": "Plan",
+        },
+        dry_run=True,
+    )
+
+    output = invocation.result["output"]
+    assert "what_would_run" in output
+    assert output["required_permissions"] == ["create_report"]
+    assert invocation.sandbox_contract_id in test_world.sandbox_contracts
+
+
+def test_audit_drilldown_api():
+    reset_global_world()
+    client = TestClient(app)
+    invocation = client.post(
+        "/tools/invoke",
+        json={
+            "tool_id": "run_tests_stub",
+        },
+    ).json()
+
+    response = client.get(
+        f"/tools/invocations/{invocation['id']}/audit"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["invocation"]["id"] == invocation["id"]
+    assert data["audit_trail"]
+
+
+def test_approve_once_from_approval_center():
+    reset_global_world()
+    client = TestClient(app)
+    invocation = client.post(
+        "/tools/invoke",
+        json={
+            "tool_id": "run_tests_stub",
+        },
+    ).json()
+
+    response = client.post(
+        f"/approvals/{invocation['id']}/approve",
+        json={
+            "approved_by": "ceo",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["invocation"]["status"] == "completed"
+    assert any(
+        entry.action == "approval_once_approved"
+        for entry in world.tool_audit_log
+    )
+
+
+def test_approve_with_scoped_grant_from_approval_center():
+    reset_global_world()
+    client = TestClient(app)
+    invocation = client.post(
+        "/tools/invoke",
+        json={
+            "tool_id": "run_tests_stub",
+            "task_id": "task-1",
+        },
+    ).json()
+
+    response = client.post(
+        f"/approvals/{invocation['id']}/approve",
+        json={
+            "approved_by": "ceo",
+            "create_grant": True,
+            "grant_scope_type": "task",
+            "grant_scope_id": "task-1",
+            "grant_expires_in_minutes": 15,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(world.permission_grants) == 1
+    grant = next(iter(world.permission_grants.values()))
+    assert grant.scope_type == "task"
+    assert grant.scope_id == "task-1"
+
+
+def test_reject_approval_center():
+    reset_global_world()
+    client = TestClient(app)
+    invocation = client.post(
+        "/tools/invoke",
+        json={
+            "tool_id": "run_tests_stub",
+        },
+    ).json()
+
+    response = client.post(
+        f"/approvals/{invocation['id']}/reject",
+        json={
+            "rejected_by": "ceo",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["invocation"]["status"] == "cancelled"
+
+
+def test_metrics_for_approvals_and_dry_run():
+    test_world = World()
+    executor = ToolExecutor(test_world)
+    pending = executor.invoke("run_tests_stub")
+    executor.invoke("generate_report_stub", dry_run=True)
+    executor.approve(pending.id)
+    rejected = executor.invoke("run_tests_stub")
+    executor.reject(rejected.id)
+
+    metrics = build_runtime_metrics(test_world)["global_metrics"]
+
+    assert metrics["approvals_approved_total"] == 1
+    assert metrics["approvals_rejected_total"] == 1
+    assert metrics["dry_run_invocations_total"] == 1
+    assert metrics["sandbox_contracts_created"] == 1
+    assert metrics["pending_approvals_by_risk"]["medium"] == 0
+
+
+def test_timeline_events_for_dry_run_and_sandbox():
+    test_world = World()
+    invocation = ToolExecutor(test_world).invoke(
+        "generate_report_stub",
+        dry_run=True,
+    )
+
+    timeline = build_runtime_timeline(test_world)
+    event_types = {
+        entry["event_type"]
+        for entry in timeline["entries"]
+        if entry.get("metadata", {}).get("invocation_id")
+        == invocation.id
+    }
+
+    assert "dry_run_requested" in event_types
+    assert "dry_run_completed" in event_types
+    assert "sandbox_contract_created" in event_types

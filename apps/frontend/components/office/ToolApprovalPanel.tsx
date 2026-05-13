@@ -8,6 +8,8 @@ import {
 
 import { frontendConfig } from "@/lib/config"
 import type {
+  ApprovalDetail,
+  ApprovalScopeSuggestion,
   Permission,
   PermissionGrant,
   PermissionScopeType,
@@ -27,6 +29,12 @@ export default function ToolApprovalPanel() {
     useState<PolicyProfile>("safe_local")
   const [grants, setGrants] =
     useState<PermissionGrant[]>([])
+  const [approvals, setApprovals] =
+    useState<ApprovalDetail[]>([])
+  const [selectedApproval, setSelectedApproval] =
+    useState<ApprovalDetail | null>(null)
+  const [dryRunPreview, setDryRunPreview] =
+    useState<Record<string, unknown> | null>(null)
   const [grantForm, setGrantForm] = useState({
     scope_type: "global" as PermissionScopeType,
     scope_id: "",
@@ -45,6 +53,7 @@ export default function ToolApprovalPanel() {
       toolsResponse,
       invocationsResponse,
       grantsResponse,
+      approvalsResponse,
     ] =
       await Promise.all([
         fetch(`${frontendConfig.apiUrl}/tools`),
@@ -52,12 +61,14 @@ export default function ToolApprovalPanel() {
           `${frontendConfig.apiUrl}/tools/invocations`
         ),
         fetch(`${frontendConfig.apiUrl}/tools/grants`),
+        fetch(`${frontendConfig.apiUrl}/approvals`),
       ])
 
     if (
       !toolsResponse.ok ||
       !invocationsResponse.ok ||
-      !grantsResponse.ok
+      !grantsResponse.ok ||
+      !approvalsResponse.ok
     ) {
       throw new Error("Failed to load tools")
     }
@@ -67,6 +78,8 @@ export default function ToolApprovalPanel() {
     const grantsData = await grantsResponse.json()
     setPolicyProfile(grantsData.policy_profile)
     setGrants(grantsData.grants)
+    const approvalsData = await approvalsResponse.json()
+    setApprovals(approvalsData.items)
   }
 
   useEffect(() => {
@@ -112,7 +125,7 @@ export default function ToolApprovalPanel() {
 
   async function approve(id: string) {
     await fetch(
-      `${frontendConfig.apiUrl}/tools/invocations/${id}/approve`,
+      `${frontendConfig.apiUrl}/approvals/${id}/approve`,
       {
         method: "POST",
         headers: {
@@ -133,7 +146,7 @@ export default function ToolApprovalPanel() {
 
   async function reject(id: string) {
     await fetch(
-      `${frontendConfig.apiUrl}/tools/invocations/${id}/reject`,
+      `${frontendConfig.apiUrl}/approvals/${id}/reject`,
       {
         method: "POST",
         headers: {
@@ -177,6 +190,66 @@ export default function ToolApprovalPanel() {
     await loadTools()
   }
 
+  async function openApproval(id: string) {
+    const response = await fetch(
+      `${frontendConfig.apiUrl}/approvals/${id}`
+    )
+    setSelectedApproval(await response.json())
+    setDryRunPreview(null)
+  }
+
+  async function dryRunApproval(detail: ApprovalDetail) {
+    const response = await fetch(
+      `${frontendConfig.apiUrl}/tools/invoke`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tool_id: detail.invocation.tool_id,
+          task_id: detail.invocation.task_id,
+          agent_id: detail.invocation.agent_id,
+          department: detail.invocation.department,
+          requested_by: "user",
+          arguments: detail.invocation.arguments,
+          dry_run: true,
+        }),
+      }
+    )
+    setDryRunPreview(await response.json())
+    await loadTools()
+  }
+
+  async function approveScope(
+    detail: ApprovalDetail,
+    scope: ApprovalScopeSuggestion
+  ) {
+    await fetch(
+      `${frontendConfig.apiUrl}/approvals/${detail.invocation.id}/approve`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          approved_by: "user",
+          create_grant: scope.scope_type !== "once",
+          grant_scope_type:
+            scope.scope_type === "once"
+              ? null
+              : scope.scope_type,
+          grant_scope_id: scope.scope_id || null,
+          grant_expires_in_minutes:
+            scope.recommended_duration_minutes || null,
+        }),
+      }
+    )
+    setSelectedApproval(null)
+    setDryRunPreview(null)
+    await loadTools()
+  }
+
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/80">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -189,6 +262,16 @@ export default function ToolApprovalPanel() {
       </div>
       <div className="mb-3 rounded bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-200">
         profile: {policyProfile}
+      </div>
+      <div className="mb-3 border border-white/10 bg-black/20 p-2 text-[10px] text-white/55">
+        {policyDescription(policyProfile)}
+        <div className="mt-1">
+          forbidden: shell, network, browser, secrets, system
+        </div>
+        <div>
+          active grants: {grants.filter((grant) => grant.active).length} · pending:{" "}
+          {approvals.length}
+        </div>
       </div>
 
       {error && (
@@ -242,6 +325,7 @@ export default function ToolApprovalPanel() {
               <InvocationCard
                 key={invocation.id}
                 invocation={invocation}
+                onOpen={openApproval}
                 onApprove={approve}
                 onReject={reject}
               />
@@ -267,6 +351,16 @@ export default function ToolApprovalPanel() {
           placeholder="Grant minutes"
         />
       </section>
+
+      {selectedApproval && (
+        <ApprovalDetailCard
+          detail={selectedApproval}
+          dryRunPreview={dryRunPreview}
+          onDryRun={dryRunApproval}
+          onApproveScope={approveScope}
+          onReject={reject}
+        />
+      )}
 
       <section className="mt-4 border-t border-white/10 pt-3">
         <div className="mb-2 font-semibold">
@@ -445,11 +539,13 @@ function GrantForm({
 function InvocationCard({
   invocation,
   readonly = false,
+  onOpen,
   onApprove,
   onReject,
 }: {
   invocation: ToolInvocation
   readonly?: boolean
+  onOpen?: (id: string) => Promise<void>
   onApprove?: (id: string) => Promise<void>
   onReject?: (id: string) => Promise<void>
 }) {
@@ -475,7 +571,14 @@ function InvocationCard({
       )}
       {!readonly &&
         invocation.status === "awaiting_approval" && (
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => onOpen?.(invocation.id)}
+              className="bg-cyan-400/15 px-2 py-1 text-cyan-200"
+            >
+              Detail
+            </button>
             <button
               type="button"
               onClick={() => onApprove?.(invocation.id)}
@@ -494,6 +597,105 @@ function InvocationCard({
         )}
     </div>
   )
+}
+
+function ApprovalDetailCard({
+  detail,
+  dryRunPreview,
+  onDryRun,
+  onApproveScope,
+  onReject,
+}: {
+  detail: ApprovalDetail
+  dryRunPreview: Record<string, unknown> | null
+  onDryRun: (detail: ApprovalDetail) => Promise<void>
+  onApproveScope: (
+    detail: ApprovalDetail,
+    scope: ApprovalScopeSuggestion
+  ) => Promise<void>
+  onReject: (id: string) => Promise<void>
+}) {
+  return (
+    <section className="mt-4 border-t border-white/10 pt-3">
+      <div className="mb-2 font-semibold">
+        Approval Center
+      </div>
+      <div className="border border-white/10 bg-black/20 p-2">
+        <div className="flex justify-between gap-2">
+          <span className="truncate text-white">
+            {detail.tool?.name || detail.invocation.tool_id}
+          </span>
+          <span className={riskClass(detail.risk_level || "low")}>
+            {detail.risk_level}
+          </span>
+        </div>
+        <div className="mt-1 text-white/45">
+          {detail.policy_decision?.reason}
+        </div>
+        <div className="mt-2 text-white/55">
+          permissions: {detail.required_permissions.join(", ")}
+        </div>
+        {detail.sandbox_contract && (
+          <div className="mt-2 text-white/45">
+            sandbox: {detail.sandbox_contract.category} · denied{" "}
+            {detail.sandbox_contract.denied_operations.length}
+          </div>
+        )}
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => onDryRun(detail)}
+            className="bg-cyan-400/15 px-2 py-1 text-cyan-200"
+          >
+            Dry-run preview
+          </button>
+          <button
+            type="button"
+            onClick={() => onReject(detail.invocation.id)}
+            className="bg-red-400/15 px-2 py-1 text-red-200"
+          >
+            Reject
+          </button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {detail.suggested_approval_scopes.map((scope) => (
+            <button
+              type="button"
+              key={`${scope.scope_type}-${scope.scope_id || "none"}`}
+              onClick={() => onApproveScope(detail, scope)}
+              className="block w-full bg-green-400/10 px-2 py-1 text-left text-green-200"
+            >
+              {scope.scope_type} · {scope.recommended_duration_minutes}m
+              <span className="block truncate text-[10px] text-white/40">
+                {scope.risk_warning}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 text-white/45">
+          audit entries: {detail.audit_trail.length}
+        </div>
+        {dryRunPreview && (
+          <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap border border-white/10 bg-black/40 p-2 text-[10px] text-white/60">
+            {JSON.stringify(dryRunPreview, null, 2)}
+          </pre>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function policyDescription(profile: PolicyProfile) {
+  if (profile === "locked_down") {
+    return "All tools require approval; high and critical are blocked."
+  }
+  if (profile === "assisted") {
+    return "Low runs locally; medium/high require approval."
+  }
+  if (profile === "autonomous_safe") {
+    return "Low/medium require matching scoped grants."
+  }
+  return "Low runs locally; medium requires approval; high is blocked."
 }
 
 function riskClass(risk: string) {

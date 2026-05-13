@@ -122,6 +122,11 @@ export type RuntimeGlobalMetrics = {
   expired_permission_grants?: number
   revoked_permission_grants?: number
   invocations_allowed_by_grant?: number
+  pending_approvals_by_risk?: PendingApprovalsByRisk
+  approvals_approved_total?: number
+  approvals_rejected_total?: number
+  dry_run_invocations_total?: number
+  sandbox_contracts_created?: number
 }
 
 export type DepartmentRuntimeMetrics = {
@@ -251,6 +256,7 @@ export type PolicyProfile =
 export type ToolPolicyProfile = PolicyProfile
 
 export type PermissionScopeType =
+  | "once"
   | "agent"
   | "department"
   | "task"
@@ -321,6 +327,8 @@ export type ToolInvocation = {
   used_grant_ids?: string[]
   approval_expires_at?: number | null
   department?: string | null
+  sandbox_contract_id?: string | null
+  dry_run?: boolean
 }
 
 export type ToolAuditEntry = {
@@ -354,6 +362,83 @@ export type PermissionGrant = {
   created_at: number
   revoked_at?: number | null
   active: boolean
+}
+
+export type ApprovalScopeSuggestion = {
+  scope_type: PermissionScopeType
+  scope_id?: string | null
+  permissions: Permission[]
+  tool_id: string
+  recommended_duration_minutes: number
+  risk_warning: string
+}
+
+export type ApprovalRiskSummary = {
+  risk_level: RiskLevel
+  required_permissions: Permission[]
+  policy_reason?: string | null
+}
+
+export type PendingApprovalsByRisk = {
+  low: number
+  medium: number
+  high: number
+  critical: number
+}
+
+export type SandboxContract = {
+  id: string
+  tool_id: string
+  category: ToolCategory
+  allowed_operations: string[]
+  denied_operations: string[]
+  required_permissions: Permission[]
+  filesystem_scope?: Record<string, unknown> | null
+  network_scope?: Record<string, unknown> | null
+  timeout_seconds: number
+  max_output_size: number
+  requires_dry_run: boolean
+  created_at: number
+}
+
+export type ToolExecutionRequest = {
+  invocation_id: string
+  tool_id: string
+  arguments: Record<string, unknown>
+  sandbox_contract_id: string
+  dry_run: boolean
+  agent_id?: string | null
+  task_id?: string | null
+}
+
+export type ToolExecutionResult = {
+  invocation_id: string
+  status: string
+  output?: Record<string, unknown> | null
+  error?: string | null
+  dry_run: boolean
+  side_effects_declared: string[]
+  side_effects_performed: string[]
+  started_at: number
+  completed_at?: number | null
+}
+
+export type ApprovalDetail = {
+  invocation: ToolInvocation
+  tool?: ToolDefinition | null
+  policy_decision?: ToolPolicyDecision | null
+  required_permissions: Permission[]
+  risk_level?: RiskLevel | null
+  related_task?: Task | null
+  related_agent?: Agent | null
+  related_department?: string | null
+  audit_trail: ToolAuditEntry[]
+  suggested_approval_scopes: ApprovalScopeSuggestion[]
+  grants_used?: PermissionGrant[]
+  policy_profile?: PolicyProfile
+  policy_profile_description?: string
+  sandbox_contract?: SandboxContract | null
+  timeline?: RuntimeTimelineEntry[]
 }
 
 export type Agent = {
@@ -468,4 +553,5 @@ export type WorldState = {
   tool_invocations?: Record<string, ToolInvocation>
   tool_audit_log?: ToolAuditEntry[]
   permission_grants?: Record<string, PermissionGrant>
+  sandbox_contracts?: Record<string, SandboxContract>
 }

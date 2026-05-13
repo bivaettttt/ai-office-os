@@ -31,6 +31,28 @@ def build_runtime_metrics(world: World) -> dict:
     commands = list(world.commands.values())
     tool_invocations = list(world.tool_invocations.values())
     grants = list(world.permission_grants.values())
+    audit_entries = list(world.tool_audit_log)
+    pending_approvals_by_risk = {
+        "low": 0,
+        "medium": 0,
+        "high": 0,
+        "critical": 0,
+    }
+    for invocation in tool_invocations:
+        if invocation.status != "awaiting_approval":
+            continue
+        tool_audit = next(
+            (
+                entry
+                for entry in audit_entries
+                if entry.invocation_id == invocation.id
+            ),
+            None,
+        )
+        if tool_audit:
+            pending_approvals_by_risk[
+                tool_audit.risk_level.value
+            ] += 1
 
     queued_tasks = [
         task
@@ -169,6 +191,33 @@ def build_runtime_metrics(world: World) -> dict:
                 if invocation.used_grant_ids
             ]
         ),
+        "pending_approvals_by_risk": pending_approvals_by_risk,
+        "approvals_approved_total": len(
+            [
+                entry
+                for entry in audit_entries
+                if entry.action
+                in [
+                    "approval_once_approved",
+                    "approval_grant_approved",
+                ]
+            ]
+        ),
+        "approvals_rejected_total": len(
+            [
+                entry
+                for entry in audit_entries
+                if entry.action == "rejected"
+            ]
+        ),
+        "dry_run_invocations_total": len(
+            [
+                invocation
+                for invocation in tool_invocations
+                if invocation.dry_run
+            ]
+        ),
+        "sandbox_contracts_created": len(world.sandbox_contracts),
     }
 
     department_metrics = [

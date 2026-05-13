@@ -12,6 +12,11 @@ from app.core.tools.permissions import (
     ToolInvocationStatus,
 )
 from app.core.tools.registry import ToolRegistry, tool_registry
+from app.core.tools.sandbox import (
+    SandboxContract,
+    ToolExecutionRequest,
+    ToolExecutionResult,
+)
 
 __all__ = [
     "Permission",
@@ -21,8 +26,11 @@ __all__ = [
     "PolicyDecisionValue",
     "PolicyProfile",
     "RiskLevel",
+    "SandboxContract",
     "ToolAuditEntry",
     "ToolDefinition",
+    "ToolExecutionRequest",
+    "ToolExecutionResult",
     "ToolInvocation",
     "ToolInvocationStatus",
     "ToolRegistry",

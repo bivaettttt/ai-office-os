@@ -89,6 +89,14 @@ class ToolAuditAction(StrEnum):
     POLICY_PROFILE_APPLIED = "policy_profile_applied"
     SCOPED_PERMISSION_ALLOWED = "scoped_permission_allowed"
     SCOPED_PERMISSION_MISSING = "scoped_permission_missing"
+    APPROVAL_OPENED = "approval_opened"
+    APPROVAL_SCOPE_SUGGESTED = "approval_scope_suggested"
+    APPROVAL_ONCE_APPROVED = "approval_once_approved"
+    APPROVAL_GRANT_APPROVED = "approval_grant_approved"
+    DRY_RUN_REQUESTED = "dry_run_requested"
+    DRY_RUN_COMPLETED = "dry_run_completed"
+    SANDBOX_CONTRACT_CREATED = "sandbox_contract_created"
+    SANDBOX_CONTRACT_BLOCKED = "sandbox_contract_blocked"
 
 
 class ToolDefinition(BaseModel):
@@ -134,6 +142,8 @@ class ToolInvocation(BaseModel):
     used_grant_ids: list[str] = Field(default_factory=list)
     approval_expires_at: Optional[float] = None
     department: Optional[str] = None
+    sandbox_contract_id: Optional[str] = None
+    dry_run: bool = False
 
 
 class ToolAuditEntry(BaseModel):

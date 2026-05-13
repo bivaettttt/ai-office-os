@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.tools.executor import ToolExecutor
+from app.core.tools.approvals import build_approval_detail
 from app.core.tools.permissions import (
     Permission,
     PermissionGrant,
@@ -30,6 +31,7 @@ class ToolInvokeRequest(BaseModel):
     department: str | None = None
     requested_by: str = "user"
     arguments: dict[str, Any] = Field(default_factory=dict)
+    dry_run: bool = False
 
 
 class ToolApprovalRequest(BaseModel):
@@ -86,8 +88,20 @@ def invoke_tool(request: ToolInvokeRequest):
         department=request.department,
         requested_by=request.requested_by,
         arguments=request.arguments,
+        dry_run=request.dry_run,
     )
     return invocation.model_dump(mode="json")
+
+
+@router.get("/tools/invocations/{invocation_id}/audit")
+def tool_invocation_audit(invocation_id: str):
+    invocation = world.tool_invocations.get(invocation_id)
+    if invocation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Tool invocation not found.",
+        )
+    return build_approval_detail(world, invocation)
 
 
 @router.post("/tools/invocations/{invocation_id}/approve")

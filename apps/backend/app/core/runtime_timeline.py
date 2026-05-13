@@ -31,6 +31,14 @@ WARNING_TYPES = {
     "grant_revoked",
     "grant_expired",
     "scoped_permission_missing",
+    "approval_opened",
+    "approval_scope_suggested",
+    "approval_once_approved",
+    "approval_grant_approved",
+    "dry_run_requested",
+    "dry_run_completed",
+    "sandbox_contract_created",
+    "sandbox_contract_blocked",
 }
 
 MANAGER_TYPES = {
@@ -421,6 +429,14 @@ def tool_audit_entry(
         "policy_profile_applied": "policy_profile_applied",
         "scoped_permission_allowed": "scoped_permission_allowed",
         "scoped_permission_missing": "scoped_permission_missing",
+        "approval_opened": "approval_opened",
+        "approval_scope_suggested": "approval_scope_suggested",
+        "approval_once_approved": "approval_once_approved",
+        "approval_grant_approved": "approval_grant_approved",
+        "dry_run_requested": "dry_run_requested",
+        "dry_run_completed": "dry_run_completed",
+        "sandbox_contract_created": "sandbox_contract_created",
+        "sandbox_contract_blocked": "sandbox_contract_blocked",
     }.get(
         str(audit.action),
         f"tool_{audit.action}",
@@ -454,8 +470,14 @@ def severity_for(event_type: str) -> str:
         "tool_approved",
         "grant_created",
         "scoped_permission_allowed",
+        "approval_once_approved",
+        "approval_grant_approved",
+        "dry_run_completed",
+        "sandbox_contract_created",
     }:
         return "success"
+    if event_type in {"sandbox_contract_blocked"}:
+        return "error"
     if event_type in WARNING_TYPES or "cancelled" in event_type:
         return "warning"
     return "info"

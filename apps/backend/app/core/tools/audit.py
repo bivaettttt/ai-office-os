@@ -35,6 +35,24 @@ EVENT_BY_ACTION = {
     ToolAuditAction.SCOPED_PERMISSION_MISSING: (
         "scoped_permission_missing"
     ),
+    ToolAuditAction.APPROVAL_OPENED: "approval_opened",
+    ToolAuditAction.APPROVAL_SCOPE_SUGGESTED: (
+        "approval_scope_suggested"
+    ),
+    ToolAuditAction.APPROVAL_ONCE_APPROVED: (
+        "approval_once_approved"
+    ),
+    ToolAuditAction.APPROVAL_GRANT_APPROVED: (
+        "approval_grant_approved"
+    ),
+    ToolAuditAction.DRY_RUN_REQUESTED: "dry_run_requested",
+    ToolAuditAction.DRY_RUN_COMPLETED: "dry_run_completed",
+    ToolAuditAction.SANDBOX_CONTRACT_CREATED: (
+        "sandbox_contract_created"
+    ),
+    ToolAuditAction.SANDBOX_CONTRACT_BLOCKED: (
+        "sandbox_contract_blocked"
+    ),
 }
 
 

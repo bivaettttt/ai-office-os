@@ -69,7 +69,8 @@ def command_preview_enhancement_request(
                 role=LLMMessageRole.USER,
                 content=(
                     "Improve this command preview. Return JSON only with keys: "
-                    "improved_title, improved_description, plan_notes.\n"
+                    "improved_title, improved_description, plan_notes, confidence_note. "
+                    "plan_notes must be an array of short strings.\n"
                     f"Command: {text}\n"
                     f"Current title: {current_title}\n"
                     f"Current description: {current_description}\n"
@@ -101,7 +102,8 @@ def task_plan_draft_request(
                 role=LLMMessageRole.USER,
                 content=(
                     "Suggest a refined plan. Return JSON only with key "
-                    "suggested_steps as an array of short strings.\n"
+                    "suggested_steps, risks, assumptions. "
+                    "Each value must be an array of short strings.\n"
                     f"Task title: {title}\n"
                     f"Department: {department}\n"
                     f"Capabilities: {', '.join(capabilities)}\n"
@@ -132,7 +134,9 @@ def manager_review_draft_request(
             LLMMessage(
                 role=LLMMessageRole.USER,
                 content=(
-                    "Write a short manager review draft.\n"
+                    "Write a short manager review draft. Return JSON only with keys: "
+                    "review_text, quality_notes, approval_recommendation. "
+                    "approval_recommendation must be approve, needs_revision, or fail.\n"
                     f"Task: {task_title}\n"
                     f"Agent: {agent_name}\n"
                     f"Steps: {', '.join(steps)}\n"
@@ -165,7 +169,8 @@ def task_summary_request(
             LLMMessage(
                 role=LLMMessageRole.USER,
                 content=(
-                    "Summarize this task in 2 short sentences.\n"
+                    "Summarize this task. Return JSON only with keys: "
+                    "summary, current_state, next_best_action.\n"
                     f"Task: {task_title}\n"
                     f"Status: {status}\n"
                     f"Steps: {', '.join(steps)}\n"
@@ -193,7 +198,9 @@ def timeline_summary_request(
             LLMMessage(
                 role=LLMMessageRole.USER,
                 content=(
-                    "Summarize what happened in this timeline.\n"
+                    "Summarize what happened in this timeline. Return JSON only with keys: "
+                    "summary, key_events, risks_or_blockers. key_events and risks_or_blockers "
+                    "must be arrays of short strings.\n"
                     + "\n".join(entries[:12])
                 ),
             ),

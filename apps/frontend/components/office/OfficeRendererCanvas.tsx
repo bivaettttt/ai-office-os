@@ -777,6 +777,26 @@ function TaskDetails({
                 : ""}
             </div>
             <div>{summary.summary}</div>
+            {summary.current_state && (
+              <div className="mt-1 text-white/55">
+                state: {summary.current_state}
+              </div>
+            )}
+            {summary.next_best_action && (
+              <div className="mt-1 text-white/55">
+                next: {summary.next_best_action}
+              </div>
+            )}
+            {summary.safety_flags.length > 0 && (
+              <div className="mt-1 text-amber-200">
+                {summary.safety_flags.join(", ")}
+              </div>
+            )}
+            {summary.fallback_reason && (
+              <div className="mt-1 text-white/45">
+                reason: {summary.fallback_reason}
+              </div>
+            )}
           </div>
         )}
       </div>

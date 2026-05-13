@@ -434,8 +434,16 @@ function PreviewCard({
           )}
 
           {preview.ai_plan_notes && (
-            <div className="mt-2 text-white/65">
-              {preview.ai_plan_notes}
+            <div className="mt-2 space-y-1 text-white/65">
+              {preview.ai_plan_notes.map((note) => (
+                <div key={note}>{note}</div>
+              ))}
+            </div>
+          )}
+
+          {preview.ai_confidence_note && (
+            <div className="mt-2 text-white/55">
+              {preview.ai_confidence_note}
             </div>
           )}
 
@@ -445,6 +453,11 @@ function PreviewCard({
                 {preview.llm_safety_flags.join(", ")}
               </div>
             )}
+          {preview.llm_fallback_reason && (
+            <div className="mt-1 text-[11px] text-white/45">
+              reason: {preview.llm_fallback_reason}
+            </div>
+          )}
         </div>
       )}
 

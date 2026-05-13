@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -42,6 +43,12 @@ def reset_global_world():
             "llm_prompt_logs": [],
         }
     )
+    LLMReasoningService._request_timestamps.clear()
+    LLMReasoningService._purpose_timestamps.clear()
+    LLMReasoningService._cache.clear()
+    LLMReasoningService._recent_rate_limited.clear()
+    LLMReasoningService._recent_schema_failures.clear()
+    LLMReasoningService._recent_fallbacks.clear()
 
 
 def make_request(
@@ -339,6 +346,43 @@ def test_invalid_json_fallback(
     assert "invalid_json_fallback" in preview["llm_safety_flags"]
 
 
+def test_schema_missing_fields_fallback(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+
+    original_complete = MockProvider.complete
+
+    def missing_fields(self, request):
+        if request.purpose == "command_preview_enhancement":
+            return LLMResponse(
+                content='{"improved_title":"Only title"}',
+                provider="mock",
+                model=self.default_model(),
+            )
+        return original_complete(self, request)
+
+    monkeypatch.setattr(
+        MockProvider,
+        "complete",
+        missing_fields,
+    )
+
+    response = TestClient(app).post(
+        "/commands/preview",
+        json={"text": "сделай лендинг для кофейни"},
+    )
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert "schema_validation_failed" in preview["llm_safety_flags"]
+
+
 def test_manager_review_draft_fallback(
     monkeypatch,
 ):
@@ -410,7 +454,32 @@ def test_task_summary_endpoint(
     assert response.status_code == 200
     data = response.json()
     assert data["summary"]
+    assert data["current_state"]
     assert data["provider_used"] == "mock"
+
+
+def test_timeline_summary_endpoint(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    world.add_event("command_routed", {"command_id": "c1"})
+    world.add_event("task_completed", {"task_id": "t1"})
+
+    response = TestClient(app).post(
+        "/llm/reasoning/timeline-summary",
+        json={"limit": 10},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]
+    assert isinstance(data["key_events"], list)
+    assert isinstance(data["risks_or_blockers"], list)
 
 
 def test_prompt_log_created_with_reasoning_purpose(
@@ -462,6 +531,126 @@ def test_reasoning_metrics_increment(
     )
 
 
+def test_reasoning_rate_limit_fallback(
+    monkeypatch,
+):
+    reset_global_world()
+    test_world = World()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_RATE_LIMIT_PER_MINUTE",
+        1,
+    )
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_RATE_LIMIT_PER_PURPOSE",
+        1,
+    )
+    service = LLMReasoningService(test_world)
+
+    first = service.enhance_command_preview(
+        text="сделай лендинг",
+        current_title="A",
+        current_description="B",
+        current_plan=["One"],
+    )
+    second = service.enhance_command_preview(
+        text="сделай лендинг v2",
+        current_title="A2",
+        current_description="B2",
+        current_plan=["One"],
+    )
+
+    assert first["provider_used"] == "mock"
+    assert second["provider_used"] == "rules"
+    assert "rate_limited" in second["safety_flags"]
+
+
+def test_reasoning_cache_hit(
+    monkeypatch,
+):
+    reset_global_world()
+    test_world = World()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    service = LLMReasoningService(test_world)
+
+    first = service.explain_command(
+        text="напиши пост",
+        department="content",
+        priority="normal",
+        capabilities=["content_writing"],
+        routing_explanation="Detected content intent.",
+    )
+    second = service.explain_command(
+        text="напиши пост",
+        department="content",
+        priority="normal",
+        capabilities=["content_writing"],
+        routing_explanation="Detected content intent.",
+    )
+
+    assert first["text"] == second["text"]
+    assert any(
+        event["type"] == "llm_reasoning_cache_hit"
+        for event in test_world.events
+    )
+
+
+def test_reasoning_diagnostics_api_shape(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    response = TestClient(app).get(
+        "/llm/reasoning/diagnostics"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "cache_size" in data
+    assert "rate_limit_settings" in data
+    assert "recent_rate_limited_count" in data
+
+
+def test_reasoning_metrics_schema_and_cache_counts(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    world.add_event("llm_reasoning_cache_hit", {"purpose": "task_summary"})
+    world.add_event(
+        "llm_reasoning_schema_validation_failed",
+        {"purpose": "command_preview_enhancement"},
+    )
+    world.add_event(
+        "llm_reasoning_rate_limited",
+        {"purpose": "timeline_summary"},
+    )
+
+    metrics = build_runtime_metrics(world)
+    global_metrics = metrics["global_metrics"]
+    assert global_metrics["llm_reasoning_cache_hits_total"] == 1
+    assert global_metrics["llm_reasoning_schema_failures_total"] == 1
+    assert global_metrics["llm_reasoning_rate_limited_total"] == 1
+
+
 def test_reasoning_does_not_invoke_tools(
     monkeypatch,
 ):
@@ -480,3 +669,26 @@ def test_reasoning_does_not_invoke_tools(
     )
 
     assert test_world.tool_invocations == {}
+
+
+def test_no_external_provider_references_in_llm_layer():
+    root = Path(__file__).resolve().parents[3]
+    files = [
+        root / "apps/backend/app/core/llm",
+        root / "apps/backend/app/api/llm.py",
+        root / ".env.example",
+        root / "README.md",
+    ]
+    forbidden_external = "open" + "ai"
+    forbidden_variant = "open" + "ai" + "_comp" + "atible"
+    for target in files:
+        if target.is_dir():
+            texts = [
+                path.read_text(encoding="utf-8")
+                for path in target.rglob("*.py")
+            ]
+        else:
+            texts = [target.read_text(encoding="utf-8")]
+        joined = "\n".join(texts).lower()
+        assert forbidden_external not in joined
+        assert forbidden_variant not in joined

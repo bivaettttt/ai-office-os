@@ -118,8 +118,9 @@ def preview_command(req: CreateCommandRequest):
     preview_payload["ai_improved_description"] = enhancement_result.get(
         "improved_description"
     )
-    preview_payload["ai_plan_notes"] = enhancement_result.get(
-        "plan_notes"
+    preview_payload["ai_plan_notes"] = enhancement_result.get("plan_notes", [])
+    preview_payload["ai_confidence_note"] = enhancement_result.get(
+        "confidence_note"
     )
     preview_payload["llm_provider_used"] = (
         enhancement_result.get("provider_used")
@@ -137,6 +138,10 @@ def preview_command(req: CreateCommandRequest):
                 *enhancement_result.get("safety_flags", []),
             ]
         )
+    )
+    preview_payload["llm_fallback_reason"] = (
+        enhancement_result.get("fallback_reason")
+        or explain_result.get("fallback_reason")
     )
 
     return {"preview": preview_payload}

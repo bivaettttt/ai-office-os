@@ -87,10 +87,12 @@ export type CommandPreview = {
   ai_explanation?: string | null
   ai_improved_title?: string | null
   ai_improved_description?: string | null
-  ai_plan_notes?: string | null
+  ai_plan_notes?: string[]
+  ai_confidence_note?: string | null
   llm_provider_used?: string | null
   llm_fallback_used?: boolean
   llm_safety_flags?: LLMSafetyFlag[]
+  llm_fallback_reason?: string | null
 }
 
 export type CommandCreateRequest = {
@@ -139,6 +141,9 @@ export type RuntimeGlobalMetrics = {
   llm_reasoning_requests_total?: number
   llm_reasoning_fallbacks_total?: number
   llm_reasoning_blocked_total?: number
+  llm_reasoning_rate_limited_total?: number
+  llm_reasoning_cache_hits_total?: number
+  llm_reasoning_schema_failures_total?: number
   llm_provider_active?: string
   llm_real_calls_enabled?: boolean
 }
@@ -464,6 +469,10 @@ export type LLMSafetyFlag =
   | "provider_fallback_used"
   | "invalid_json_fallback"
   | "forbidden_purpose_blocked"
+  | "schema_validation_failed"
+  | "rate_limited"
+
+export type ReasoningSafetyFlag = LLMSafetyFlag
 
 export type LLMReasoningPurpose =
   | "command_explanation"
@@ -477,6 +486,49 @@ export type ReasoningFallbackInfo = {
   fallback_used: boolean
   provider_used: string
   safety_flags: LLMSafetyFlag[]
+  fallback_reason?: string | null
+}
+
+export type CommandPreviewEnhancement = {
+  improved_title: string
+  improved_description: string
+  plan_notes: string[]
+  confidence_note?: string | null
+}
+
+export type TaskPlanDraft = {
+  suggested_steps: string[]
+  risks: string[]
+  assumptions: string[]
+}
+
+export type ManagerReviewDraft = {
+  review_text: string
+  quality_notes: string[]
+  approval_recommendation:
+    | "approve"
+    | "needs_revision"
+    | "fail"
+}
+
+export type TaskSummaryResult = {
+  summary: string
+  current_state: string
+  next_best_action?: string | null
+  provider_used: string
+  safety_flags: LLMSafetyFlag[]
+  fallback_used: boolean
+  fallback_reason?: string | null
+}
+
+export type TimelineSummaryResult = {
+  summary: string
+  key_events: string[]
+  risks_or_blockers: string[]
+  provider_used: string
+  safety_flags: LLMSafetyFlag[]
+  fallback_used: boolean
+  fallback_reason?: string | null
 }
 
 export type LLMMessage = {
@@ -530,6 +582,21 @@ export type LLMReasoningStatus = {
   blocked_purposes: string[]
 }
 
+export type LLMReasoningDiagnostics = {
+  reasoning_enabled: boolean
+  allowed_purposes: string[]
+  blocked_purposes: string[]
+  cache_size: number
+  rate_limit_settings: {
+    per_minute: number
+    per_purpose: number
+    cache_ttl_seconds: number
+  }
+  recent_rate_limited_count: number
+  recent_schema_failures_count: number
+  recent_fallbacks_count: number
+}
+
 export type LLMPromptLogEntry = {
   id: string
   timestamp: number
@@ -556,9 +623,24 @@ export type CommandReasoningResponse = {
 
 export type TaskSummaryReasoningResponse = {
   summary: string
+  current_state?: string | null
+  next_best_action?: string | null
+  provider?: string
   provider_used: string
   safety_flags: LLMSafetyFlag[]
   fallback_used: boolean
+  fallback_reason?: string | null
+}
+
+export type TimelineSummaryReasoningResponse = {
+  summary: string
+  key_events: string[]
+  risks_or_blockers: string[]
+  provider?: string
+  provider_used: string
+  safety_flags: LLMSafetyFlag[]
+  fallback_used: boolean
+  fallback_reason?: string | null
 }
 
 export type Agent = {

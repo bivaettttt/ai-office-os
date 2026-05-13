@@ -8,6 +8,7 @@ import {
 import { frontendConfig } from "@/lib/config"
 import type {
   DepartmentRuntimeMetrics,
+  TimelineSummaryReasoningResponse,
   RuntimeMetrics,
   RuntimeTimelineEntry,
   RuntimeTimelineResponse,
@@ -22,6 +23,10 @@ export default function ExecutionDashboard() {
     useState("all")
   const [timeline, setTimeline] =
     useState<RuntimeTimelineResponse | null>(null)
+  const [timelineSummary, setTimelineSummary] =
+    useState<TimelineSummaryReasoningResponse | null>(null)
+  const [timelineSummaryLoading, setTimelineSummaryLoading] =
+    useState(false)
   const [debugJson, setDebugJson] =
     useState("")
 
@@ -172,6 +177,34 @@ export default function ExecutionDashboard() {
         filter={timelineFilter}
         onFilter={setTimelineFilter}
         onDebug={setDebugJson}
+        summary={timelineSummary}
+        summaryLoading={timelineSummaryLoading}
+        onSummarize={async () => {
+          setTimelineSummaryLoading(true)
+          try {
+            const response = await fetch(
+              `${frontendConfig.apiUrl}/llm/reasoning/timeline-summary`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  limit: 30,
+                }),
+              }
+            )
+            const data = await response.json()
+            if (!response.ok) {
+              throw new Error(
+                data.detail || "Timeline summary failed"
+              )
+            }
+            setTimelineSummary(data)
+          } finally {
+            setTimelineSummaryLoading(false)
+          }
+        }}
       />
 
       {debugJson && (
@@ -336,11 +369,17 @@ function TimelineSection({
   filter,
   onFilter,
   onDebug,
+  summary,
+  summaryLoading,
+  onSummarize,
 }: {
   entries: RuntimeTimelineEntry[]
   filter: string
   onFilter: (value: string) => void
   onDebug: (value: string) => void
+  summary: TimelineSummaryReasoningResponse | null
+  summaryLoading: boolean
+  onSummarize: () => void
 }) {
   const filtered = entries.filter((entry) => {
     if (filter === "errors") {
@@ -375,14 +414,47 @@ function TimelineSection({
         <div className="font-semibold">
           Timeline
         </div>
-        <button
-          type="button"
-          onClick={copyDebugJson}
-          className="bg-white/10 px-2 py-1 text-[10px] text-white"
-        >
-          Copy debug JSON
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onSummarize}
+            className="bg-cyan-400/15 px-2 py-1 text-[10px] text-cyan-200"
+          >
+            {summaryLoading
+              ? "Summarizing..."
+              : "AI timeline summary"}
+          </button>
+          <button
+            type="button"
+            onClick={copyDebugJson}
+            className="bg-white/10 px-2 py-1 text-[10px] text-white"
+          >
+            Copy debug JSON
+          </button>
+        </div>
       </div>
+
+      {summary && (
+        <div className="mb-3 border border-white/10 bg-black/20 p-2 text-[11px]">
+          <div className="text-cyan-200">
+            {summary.provider_used}
+            {summary.fallback_used ? " · fallback" : ""}
+          </div>
+          <div className="mt-1 text-white/75">
+            {summary.summary}
+          </div>
+          {summary.key_events.length > 0 && (
+            <div className="mt-2 text-white/55">
+              events: {summary.key_events.join(" | ")}
+            </div>
+          )}
+          {summary.risks_or_blockers.length > 0 && (
+            <div className="mt-1 text-amber-200">
+              risks: {summary.risks_or_blockers.join(" | ")}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mb-2 grid grid-cols-5 gap-1 text-[10px]">
         {["all", "task", "command", "manager", "errors"].map(

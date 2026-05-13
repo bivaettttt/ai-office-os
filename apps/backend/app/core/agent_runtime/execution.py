@@ -157,7 +157,7 @@ def review_completed_task(
                 agent_name=agent_name,
                 result_summary=summary,
             )
-            summary = draft["text"]
+            summary = draft["review_text"]
         except Exception:
             pass
     task.result_summary = summary

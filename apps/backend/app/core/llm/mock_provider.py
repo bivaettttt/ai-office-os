@@ -46,27 +46,34 @@ class MockProvider(LLMProvider):
             content = (
                 '{"improved_title":"Refined command draft",'
                 '"improved_description":"Clarified local command description.",'
-                '"plan_notes":"Keep the scope read-only and controlled."}'
+                '"plan_notes":["Keep the scope read-only and controlled.",'
+                '"Preserve the existing task routing flow."],'
+                '"confidence_note":"Local mock reasoning returned a safe deterministic preview."}'
             )
         elif template == "task_plan_draft":
             content = (
                 '{"suggested_steps":["Clarify request",'
-                '"Refine plan","Validate summary"]}'
+                '"Refine plan","Validate summary"],'
+                '"risks":["No real execution is performed at this stage."],'
+                '"assumptions":["The current department routing remains unchanged."]}'
             )
         elif template == "manager_review_draft":
             content = (
-                "Manager review draft: execution matched the current plan "
-                "and the summary is ready for controlled completion."
+                '{"review_text":"Execution matched the visible plan and the task can be closed in the controlled local flow.",'
+                '"quality_notes":["Result stayed inside the approved local reasoning boundary."],'
+                '"approval_recommendation":"approve"}'
             )
         elif template == "task_summary":
             content = (
-                "Task summary: the task progressed through its visible steps "
-                "and remains inside the controlled local workflow."
+                '{"summary":"The task progressed through its visible steps inside the controlled local workflow.",'
+                '"current_state":"Task state is consistent with the current step and progress.",'
+                '"next_best_action":"Continue the current controlled task flow or review completion."}'
             )
         elif template == "timeline_summary":
             content = (
-                "Timeline summary: the recent events show a normal local "
-                "sequence of routing, execution, and status updates."
+                '{"summary":"The recent timeline shows a normal local sequence of routing, execution, and status updates.",'
+                '"key_events":["Command routed","Task executed","Status updated"],'
+                '"risks_or_blockers":[]}'
             )
 
         return LLMResponse(

@@ -194,6 +194,28 @@ def test_reasoning_disabled_keeps_preview_rules_based(
     assert preview["llm_fallback_used"] is True
 
 
+def test_valid_structured_command_enhancement_parsed(
+    monkeypatch,
+):
+    reset_global_world()
+    monkeypatch.setattr(
+        settings,
+        "LLM_REASONING_ENABLED",
+        True,
+    )
+    response = TestClient(app).post(
+        "/commands/preview",
+        json={
+            "text": "сделай лендинг для кофейни",
+        },
+    )
+
+    assert response.status_code == 200
+    preview = response.json()["preview"]
+    assert preview["ai_improved_title"] == "Refined command draft"
+    assert isinstance(preview["ai_plan_notes"], list)
+
+
 def test_confidence_score():
     preview = build_command_preview(
         "urgent frontend website"

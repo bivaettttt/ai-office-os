@@ -20,6 +20,8 @@ SUCCESS_TYPES = {
     "manager_review_approved",
     "command_task_created",
     "llm_reasoning_completed",
+    "llm_reasoning_cache_hit",
+    "llm_timeline_summary_generated",
 }
 
 WARNING_TYPES = {
@@ -44,6 +46,8 @@ WARNING_TYPES = {
     "llm_guardrail_blocked",
     "llm_reasoning_fallback_used",
     "llm_reasoning_blocked",
+    "llm_reasoning_rate_limited",
+    "llm_reasoning_schema_validation_failed",
 }
 
 MANAGER_TYPES = {
@@ -88,6 +92,10 @@ LLM_TYPES = {
     "llm_reasoning_completed",
     "llm_reasoning_fallback_used",
     "llm_reasoning_blocked",
+    "llm_reasoning_cache_hit",
+    "llm_reasoning_rate_limited",
+    "llm_reasoning_schema_validation_failed",
+    "llm_timeline_summary_generated",
 }
 
 

@@ -35,6 +35,7 @@ def build_runtime_metrics(world: World) -> dict:
     grants = list(world.permission_grants.values())
     audit_entries = list(world.tool_audit_log)
     llm_logs = list(world.llm_prompt_logs)
+    events = list(world.events)
     pending_approvals_by_risk = {
         "low": 0,
         "medium": 0,
@@ -261,6 +262,28 @@ def build_runtime_metrics(world: World) -> dict:
                     in ALLOWED_REASONING_PURPOSES
                     and entry.status == "blocked"
                 )
+            ]
+        ),
+        "llm_reasoning_rate_limited_total": len(
+            [
+                event
+                for event in events
+                if event.get("type") == "llm_reasoning_rate_limited"
+            ]
+        ),
+        "llm_reasoning_cache_hits_total": len(
+            [
+                event
+                for event in events
+                if event.get("type") == "llm_reasoning_cache_hit"
+            ]
+        ),
+        "llm_reasoning_schema_failures_total": len(
+            [
+                event
+                for event in events
+                if event.get("type")
+                == "llm_reasoning_schema_validation_failed"
             ]
         ),
         "llm_provider_active": (

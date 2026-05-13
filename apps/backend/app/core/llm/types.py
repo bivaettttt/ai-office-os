@@ -4,7 +4,7 @@ import time
 import uuid
 
 from enum import StrEnum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,8 @@ class LLMSafetyFlag(StrEnum):
     PROVIDER_FALLBACK_USED = "provider_fallback_used"
     INVALID_JSON_FALLBACK = "invalid_json_fallback"
     FORBIDDEN_PURPOSE_BLOCKED = "forbidden_purpose_blocked"
+    SCHEMA_VALIDATION_FAILED = "schema_validation_failed"
+    RATE_LIMITED = "rate_limited"
 
 
 class LLMMessage(BaseModel):
@@ -92,3 +94,49 @@ class LLMStatusResponse(BaseModel):
     providers: list[LLMProviderStatus]
     model_configuration: dict[str, Any]
     prompt_log_enabled: bool
+
+
+class CommandPreviewEnhancement(BaseModel):
+    improved_title: str
+    improved_description: str
+    plan_notes: list[str] = Field(default_factory=list)
+    confidence_note: str | None = None
+
+
+class TaskPlanDraft(BaseModel):
+    suggested_steps: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+
+
+class ManagerReviewDraft(BaseModel):
+    review_text: str
+    quality_notes: list[str] = Field(default_factory=list)
+    approval_recommendation: Literal[
+        "approve",
+        "needs_revision",
+        "fail",
+    ]
+
+
+class TaskSummaryResult(BaseModel):
+    summary: str
+    current_state: str
+    next_best_action: str | None = None
+
+
+class TimelineSummaryResult(BaseModel):
+    summary: str
+    key_events: list[str] = Field(default_factory=list)
+    risks_or_blockers: list[str] = Field(default_factory=list)
+
+
+class LLMReasoningDiagnostics(BaseModel):
+    reasoning_enabled: bool
+    allowed_purposes: list[str]
+    blocked_purposes: list[str]
+    cache_size: int
+    rate_limit_settings: dict[str, int]
+    recent_rate_limited_count: int
+    recent_schema_failures_count: int
+    recent_fallbacks_count: int

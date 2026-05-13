@@ -43,10 +43,12 @@ class CommandPreview(BaseModel):
     ai_explanation: str | None = None
     ai_improved_title: str | None = None
     ai_improved_description: str | None = None
-    ai_plan_notes: str | None = None
+    ai_plan_notes: list[str] = Field(default_factory=list)
+    ai_confidence_note: str | None = None
     llm_provider_used: str | None = None
     llm_fallback_used: bool = False
     llm_safety_flags: list[str] = Field(default_factory=list)
+    llm_fallback_reason: str | None = None
 
 
 DEPARTMENT_KEYWORDS: dict[str, list[str]] = {

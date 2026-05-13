@@ -8,6 +8,7 @@ import {
 import { frontendConfig } from "@/lib/config"
 import type {
   LLMPromptLogEntry,
+  LLMReasoningDiagnostics,
   LLMReasoningStatus,
   LLMResponse,
   LLMStatusResponse,
@@ -20,6 +21,8 @@ export default function LLMStatusPanel() {
     useState<LLMPromptLogEntry[]>([])
   const [reasoningStatus, setReasoningStatus] =
     useState<LLMReasoningStatus | null>(null)
+  const [diagnostics, setDiagnostics] =
+    useState<LLMReasoningDiagnostics | null>(null)
   const [prompt, setPrompt] =
     useState("Summarize current office status")
   const [response, setResponse] =
@@ -32,14 +35,21 @@ export default function LLMStatusPanel() {
       statusResponse,
       logsResponse,
       reasoningResponse,
+      diagnosticsResponse,
     ] =
       await Promise.all([
         fetch(`${frontendConfig.apiUrl}/llm/status`),
         fetch(`${frontendConfig.apiUrl}/llm/logs?limit=6`),
         fetch(`${frontendConfig.apiUrl}/llm/reasoning/status`),
+        fetch(`${frontendConfig.apiUrl}/llm/reasoning/diagnostics`),
       ])
 
-    if (!statusResponse.ok || !logsResponse.ok || !reasoningResponse.ok) {
+    if (
+      !statusResponse.ok ||
+      !logsResponse.ok ||
+      !reasoningResponse.ok ||
+      !diagnosticsResponse.ok
+    ) {
       throw new Error("Failed to load LLM status")
     }
 
@@ -47,6 +57,7 @@ export default function LLMStatusPanel() {
     const logsData = await logsResponse.json()
     setLogs(logsData.items)
     setReasoningStatus(await reasoningResponse.json())
+    setDiagnostics(await diagnosticsResponse.json())
   }
 
   useEffect(() => {
@@ -134,6 +145,38 @@ export default function LLMStatusPanel() {
               ? "enabled"
               : "disabled"}
           </div>
+          {diagnostics && (
+            <>
+              <div>
+                fallbacks: {diagnostics.recent_fallbacks_count}
+              </div>
+              <div>
+                rate limited:{" "}
+                {diagnostics.recent_rate_limited_count}
+              </div>
+              <div>
+                schema failures:{" "}
+                {diagnostics.recent_schema_failures_count}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {diagnostics && (
+        <div className="mb-3 rounded border border-white/10 bg-black/20 p-2 text-[11px] text-white/60">
+          <div>
+            cache: {diagnostics.cache_size}
+          </div>
+          <div>
+            limit/min: {diagnostics.rate_limit_settings.per_minute}
+          </div>
+          <div>
+            limit/purpose: {diagnostics.rate_limit_settings.per_purpose}
+          </div>
+          <div>
+            cache ttl: {diagnostics.rate_limit_settings.cache_ttl_seconds}s
+          </div>
         </div>
       )}
 
@@ -215,6 +258,11 @@ export default function LLMStatusPanel() {
               <div className="truncate text-white/35">
                 {log.response_preview || log.error || "no response"}
               </div>
+              {log.safety_flags.length > 0 && (
+                <div className="mt-1 truncate text-[10px] text-amber-200">
+                  {log.safety_flags.join(", ")}
+                </div>
+              )}
             </div>
           ))}
         </div>

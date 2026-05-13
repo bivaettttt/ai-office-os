@@ -1,11 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import {
+  useEffect,
+  useState,
+} from "react"
 
 import { frontendConfig } from "@/lib/config"
 import { useWorldStore } from "@/store/useWorldStore"
 import type {
   CommandPreview,
+  PromotedCommandDraft,
   Task,
   UserCommand,
 } from "@ai-office/types"
@@ -49,6 +53,8 @@ export default function CommandCenter() {
   const [result, setResult] =
     useState<CommandResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [promotedDraft, setPromotedDraft] =
+    useState<PromotedCommandDraft | null>(null)
   const commands = useWorldStore(
     (state) => state.commands || {}
   )
@@ -160,6 +166,51 @@ export default function CommandCenter() {
     .sort((a, b) => b.created_at - a.created_at)
     .slice(0, 5)
 
+  useEffect(() => {
+    function handlePromotedDraft(event: Event) {
+      const customEvent = event as CustomEvent<PromotedCommandDraft>
+      const detail = customEvent.detail
+      if (!detail) {
+        return
+      }
+      setTitle(detail.title)
+      setDescription(detail.description)
+      setDepartment(detail.department)
+      setPriority(detail.priority)
+      setPromotedDraft(detail)
+      setPreview((current) =>
+        current ?? {
+          normalized_text: text.trim().toLowerCase(),
+          inferred_department: detail.department,
+          inferred_priority: detail.priority,
+          inferred_capabilities: detail.capabilities,
+          routing_explanation: "Draft promoted from reviewed AI suggestion.",
+          proposed_title: detail.title,
+          proposed_description: detail.description,
+          proposed_steps: [],
+          warnings: [],
+          confidence_score: 0.6,
+          valid: true,
+          ai_plan_notes: detail.plan_notes,
+          llm_provider_used: "reviewed_suggestion",
+          llm_fallback_used: false,
+          llm_safety_flags: [],
+        }
+      )
+    }
+
+    window.addEventListener(
+      "ai-office:promoted-command-draft",
+      handlePromotedDraft as EventListener
+    )
+    return () => {
+      window.removeEventListener(
+        "ai-office:promoted-command-draft",
+        handlePromotedDraft as EventListener
+      )
+    }
+  }, [text])
+
   return (
     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
       <div className="mb-3 text-2xl">
@@ -255,6 +306,7 @@ export default function CommandCenter() {
           preview={preview}
           title={title}
           description={description}
+          promotedDraft={promotedDraft}
           onTitle={setTitle}
           onDescription={setDescription}
         />
@@ -325,12 +377,14 @@ function PreviewCard({
   preview,
   title,
   description,
+  promotedDraft,
   onTitle,
   onDescription,
 }: {
   preview: CommandPreview
   title: string
   description: string
+  promotedDraft: PromotedCommandDraft | null
   onTitle: (value: string) => void
   onDescription: (value: string) => void
 }) {
@@ -342,6 +396,11 @@ function PreviewCard({
 
   return (
     <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-500/10 p-3 text-xs text-white/80">
+      {promotedDraft && (
+        <div className="mb-3 inline-flex rounded bg-amber-400/15 px-2 py-1 text-[10px] text-amber-200">
+          Promoted from AI suggestion
+        </div>
+      )}
       <div className="grid grid-cols-[78px_1fr] gap-y-1">
         <span className="text-white/45">Dept</span>
         <span>{preview.inferred_department}</span>

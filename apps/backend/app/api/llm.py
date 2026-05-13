@@ -6,7 +6,11 @@ from pydantic import BaseModel
 from app.core.llm.guardrails import LLMGuardrailError
 from app.core.llm.reasoning import LLMReasoningService
 from app.core.llm.service import LLMService
-from app.core.llm.suggestions import SuggestionService
+from app.core.llm.suggestions import (
+    SuggestionBulkExpireRequest,
+    SuggestionBulkRejectRequest,
+    SuggestionService,
+)
 from app.core.runtime_timeline import build_runtime_timeline
 from app.core.world import world
 
@@ -184,16 +188,22 @@ def llm_reasoning_timeline_summary(
 def list_llm_suggestions(
     type: str | None = None,
     status: str | None = None,
+    department: str | None = None,
+    manager_id: str | None = None,
     task_id: str | None = None,
     command_id: str | None = None,
+    only_pending: bool = False,
     limit: int = 50,
 ):
     service = SuggestionService(world)
     items = service.list_suggestions(
         suggestion_type=type,
         status=status,
+        department=department,
+        manager_id=manager_id,
         task_id=task_id,
         command_id=command_id,
+        only_pending=only_pending,
         limit=limit,
     )
     return {
@@ -202,6 +212,29 @@ def list_llm_suggestions(
         ],
         "total": len(items),
     }
+
+
+@router.get("/llm/suggestions/review-queue")
+def llm_suggestions_review_queue(
+    status: str | None = None,
+    type: str | None = None,
+    department: str | None = None,
+    task_id: str | None = None,
+    command_id: str | None = None,
+    manager_id: str | None = None,
+    only_pending: bool = False,
+    limit: int = 50,
+):
+    return SuggestionService(world).review_queue(
+        suggestion_type=type,
+        status=status,
+        department=department,
+        task_id=task_id,
+        command_id=command_id,
+        manager_id=manager_id,
+        only_pending=only_pending,
+        limit=limit,
+    )
 
 
 @router.get("/llm/suggestions/{suggestion_id}")
@@ -266,3 +299,38 @@ def apply_llm_suggestion(
         "suggestion": suggestion.model_dump(mode="json") if suggestion else None,
         "result": result,
     }
+
+
+@router.post("/llm/suggestions/bulk-expire")
+def bulk_expire_llm_suggestions(
+    request: SuggestionBulkExpireRequest,
+):
+    return SuggestionService(world).bulk_expire(
+        older_than_minutes=request.older_than_minutes,
+        suggestion_type=request.type,
+        status=request.status,
+        department=request.department,
+    )
+
+
+@router.post("/llm/suggestions/bulk-reject")
+def bulk_reject_llm_suggestions(
+    request: SuggestionBulkRejectRequest,
+):
+    return SuggestionService(world).bulk_reject(
+        ids=request.ids,
+        rejection_reason=request.rejection_reason,
+        reviewed_by=request.reviewed_by,
+    )
+
+
+@router.post("/llm/suggestions/{suggestion_id}/promote-command-draft")
+def promote_command_draft_suggestion(
+    suggestion_id: str,
+):
+    try:
+        return SuggestionService(world).promote_command_draft(
+            suggestion_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

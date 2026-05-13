@@ -15,6 +15,7 @@ from app.core.runtime_timeline import (
     build_runtime_timeline,
 )
 from app.core.factory import create_task
+from app.core.llm.suggestions import SuggestionService
 from app.core.llm.reasoning import LLMReasoningService
 from app.core.world import world
 from app.models.command import (
@@ -47,6 +48,11 @@ def command_detail(command: UserCommand):
         else None
     )
 
+    suggestions = SuggestionService(world).list_suggestions(
+        command_id=command.id,
+        limit=50,
+    )
+
     return {
         "command": command.model_dump(mode="json"),
         "created_task": (
@@ -73,6 +79,10 @@ def command_detail(command: UserCommand):
             if command.inferred_department
             else None
         ),
+        "suggestions": [
+            item.model_dump(mode="json")
+            for item in suggestions
+        ],
     }
 
 

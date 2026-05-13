@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     LLM_REASONING_RATE_LIMIT_PER_MINUTE: int = Field(default=20, gt=0)
     LLM_REASONING_RATE_LIMIT_PER_PURPOSE: int = Field(default=8, gt=0)
     LLM_REASONING_CACHE_TTL_SECONDS: int = Field(default=120, gt=0)
+    LLM_SUGGESTION_TTL_MINUTES: int = Field(default=240, gt=0)
+    LLM_SUGGESTION_MAX_HISTORY: int = Field(default=200, gt=0)
 
     WORLD_SYNC_INTERVAL_SECONDS: float = Field(default=1.0, gt=0)
     PERSISTENCE_ENABLED: bool = True

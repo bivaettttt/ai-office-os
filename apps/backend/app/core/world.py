@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict
 import time
 
+from app.config.settings import settings
 from app.models.agent import Agent
 from app.models.task import Task
 from app.models.department import Department
@@ -187,7 +188,9 @@ class World:
     ):
 
         self.llm_suggestions.append(entry)
-        self.llm_suggestions = self.llm_suggestions[-200:]
+        self.llm_suggestions = self.llm_suggestions[
+            -settings.LLM_SUGGESTION_MAX_HISTORY :
+        ]
 
     # =====================================================
     # HYDRATION

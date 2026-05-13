@@ -315,6 +315,36 @@ def build_runtime_metrics(world: World) -> dict:
                 if item.status == "applied"
             ]
         ),
+        "llm_suggestions_expired_total": len(
+            [
+                item
+                for item in llm_suggestions
+                if item.status == "expired"
+            ]
+        ),
+        "llm_suggestions_promoted_total": len(
+            [
+                event
+                for event in events
+                if event.get("type")
+                == "llm_suggestion_promoted_to_command_draft"
+            ]
+        ),
+        "llm_suggestions_oldest_pending_age_seconds": max(
+            [
+                int(time.time() - item.created_at)
+                for item in llm_suggestions
+                if item.status == "pending_review"
+            ],
+            default=0,
+        ),
+        "llm_review_queue_pending_count": len(
+            [
+                item
+                for item in llm_suggestions
+                if item.status == "pending_review"
+            ]
+        ),
         "llm_provider_active": (
             llm_logs[-1].provider
             if llm_logs

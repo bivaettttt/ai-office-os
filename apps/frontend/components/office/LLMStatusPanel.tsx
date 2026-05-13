@@ -1,17 +1,18 @@
 "use client"
 
 import {
+  useCallback,
   useEffect,
   useState,
 } from "react"
 
 import { frontendConfig } from "@/lib/config"
 import type {
-  LLMGeneratedSuggestion,
   LLMPromptLogEntry,
   LLMReasoningDiagnostics,
   LLMReasoningStatus,
   LLMResponse,
+  LLMSuggestionReviewQueueResponse,
   LLMStatusResponse,
 } from "@ai-office/types"
 
@@ -24,8 +25,12 @@ export default function LLMStatusPanel() {
     useState<LLMReasoningStatus | null>(null)
   const [diagnostics, setDiagnostics] =
     useState<LLMReasoningDiagnostics | null>(null)
-  const [suggestions, setSuggestions] =
-    useState<LLMGeneratedSuggestion[]>([])
+  const [reviewQueue, setReviewQueue] =
+    useState<LLMSuggestionReviewQueueResponse | null>(null)
+  const [queueTypeFilter, setQueueTypeFilter] =
+    useState("")
+  const [queueDepartmentFilter, setQueueDepartmentFilter] =
+    useState("")
   const [prompt, setPrompt] =
     useState("Summarize current office status")
   const [response, setResponse] =
@@ -33,7 +38,7 @@ export default function LLMStatusPanel() {
   const [error, setError] =
     useState("")
 
-  async function loadStatus() {
+  const loadStatus = useCallback(async function loadStatus() {
     const [
       statusResponse,
       logsResponse,
@@ -46,7 +51,17 @@ export default function LLMStatusPanel() {
         fetch(`${frontendConfig.apiUrl}/llm/logs?limit=6`),
         fetch(`${frontendConfig.apiUrl}/llm/reasoning/status`),
         fetch(`${frontendConfig.apiUrl}/llm/reasoning/diagnostics`),
-        fetch(`${frontendConfig.apiUrl}/llm/suggestions?status=pending_review&limit=6`),
+        fetch(
+          `${frontendConfig.apiUrl}/llm/suggestions/review-queue?only_pending=true&limit=6${
+            queueTypeFilter
+              ? `&type=${encodeURIComponent(queueTypeFilter)}`
+              : ""
+          }${
+            queueDepartmentFilter
+              ? `&department=${encodeURIComponent(queueDepartmentFilter)}`
+              : ""
+          }`
+        ),
       ])
 
     if (
@@ -64,9 +79,8 @@ export default function LLMStatusPanel() {
     setLogs(logsData.items)
     setReasoningStatus(await reasoningResponse.json())
     setDiagnostics(await diagnosticsResponse.json())
-    const suggestionsData = await suggestionsResponse.json()
-    setSuggestions(suggestionsData.items)
-  }
+    setReviewQueue(await suggestionsResponse.json())
+  }, [queueDepartmentFilter, queueTypeFilter])
 
   useEffect(() => {
     let disposed = false
@@ -98,7 +112,7 @@ export default function LLMStatusPanel() {
       disposed = true
       window.clearInterval(timer)
     }
-  }, [])
+  }, [loadStatus])
 
   async function runTest() {
     setError("")
@@ -139,6 +153,40 @@ export default function LLMStatusPanel() {
         body: JSON.stringify({
           reviewed_by: "manager-ui",
         }),
+      }
+    )
+    await loadStatus()
+  }
+
+  async function promoteSuggestion(
+    suggestionId: string
+  ) {
+    const response = await fetch(
+      `${frontendConfig.apiUrl}/llm/suggestions/${suggestionId}/promote-command-draft`,
+      { method: "POST" }
+    )
+    const data = await response.json()
+    if (!response.ok) {
+      setError(data.detail || "Failed to promote draft")
+      return
+    }
+    window.dispatchEvent(
+      new CustomEvent("ai-office:promoted-command-draft", {
+        detail: data,
+      })
+    )
+    await loadStatus()
+  }
+
+  async function bulkExpirePending() {
+    await fetch(
+      `${frontendConfig.apiUrl}/llm/suggestions/bulk-expire`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
       }
     )
     await loadStatus()
@@ -267,34 +315,84 @@ export default function LLMStatusPanel() {
 
       <div className="mt-4 border-t border-white/10 pt-3">
         <div className="mb-2 font-semibold">
-          Pending AI suggestions
+          Review queue
         </div>
+        <div className="mb-2 grid grid-cols-2 gap-2">
+          <select
+            value={queueTypeFilter}
+            onChange={(event) =>
+              setQueueTypeFilter(event.target.value)
+            }
+            className="border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-white"
+          >
+            <option value="">all types</option>
+            <option value="command_preview">command_preview</option>
+            <option value="task_plan">task_plan</option>
+            <option value="manager_review">manager_review</option>
+            <option value="task_summary">task_summary</option>
+            <option value="timeline_summary">timeline_summary</option>
+          </select>
+          <select
+            value={queueDepartmentFilter}
+            onChange={(event) =>
+              setQueueDepartmentFilter(event.target.value)
+            }
+            className="border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-white"
+          >
+            <option value="">all departments</option>
+            <option value="development">development</option>
+            <option value="analytics">analytics</option>
+            <option value="assistant">assistant</option>
+            <option value="content">content</option>
+            <option value="operations">operations</option>
+          </select>
+        </div>
+        {reviewQueue && (
+          <div className="mb-2 rounded border border-white/10 bg-black/20 p-2 text-[11px] text-white/60">
+            <div>
+              pending: {reviewQueue.counts_by_status.pending_review || 0}
+            </div>
+            <div>
+              oldest pending: {reviewQueue.oldest_pending_age_seconds}s
+            </div>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => void bulkExpirePending()}
+          className="mb-3 bg-white/10 px-2 py-1 text-[10px] text-white/75"
+        >
+          Bulk expire old pending
+        </button>
         <div className="mb-4 max-h-44 space-y-2 overflow-auto">
-          {suggestions.length === 0 ? (
+          {!reviewQueue || reviewQueue.suggestions.length === 0 ? (
             <div className="text-white/35">none</div>
           ) : (
-            suggestions.map((item) => (
+            reviewQueue.suggestions.map((item) => (
               <div
-                key={item.id}
+                key={item.suggestion.id}
                 className="border border-white/10 bg-black/20 p-2"
               >
                 <div className="flex justify-between gap-2">
-                  <span>{item.type}</span>
+                  <span>{item.suggestion.type}</span>
                   <span className="text-cyan-200">
-                    {item.source_provider}
+                    {item.suggestion.source_provider}
                   </span>
                 </div>
                 <div className="truncate text-white/45">
-                  {item.task_id || item.command_id || "unscoped"}
+                  {item.department || "unknown"} · {item.age_seconds}s
                 </div>
                 <div className="truncate text-white/65">
-                  {item.content}
+                  {item.suggestion.content}
+                </div>
+                <div className="mt-1 text-[10px] text-white/45">
+                  {item.apply_effect_preview}
                 </div>
                 <div className="mt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={() =>
-                      void reviewSuggestion(item.id, "approve")
+                      void reviewSuggestion(item.suggestion.id, "approve")
                     }
                     className="bg-green-400/15 px-2 py-1 text-[10px] text-green-200"
                   >
@@ -303,7 +401,7 @@ export default function LLMStatusPanel() {
                   <button
                     type="button"
                     onClick={() =>
-                      void reviewSuggestion(item.id, "reject")
+                      void reviewSuggestion(item.suggestion.id, "reject")
                     }
                     className="bg-red-400/15 px-2 py-1 text-[10px] text-red-200"
                   >
@@ -312,12 +410,24 @@ export default function LLMStatusPanel() {
                   <button
                     type="button"
                     onClick={() =>
-                      void reviewSuggestion(item.id, "apply")
+                      void reviewSuggestion(item.suggestion.id, "apply")
                     }
+                    disabled={!item.can_apply}
                     className="bg-cyan-400/15 px-2 py-1 text-[10px] text-cyan-200"
                   >
                     Apply
                   </button>
+                  {item.suggestion.type === "command_preview" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void promoteSuggestion(item.suggestion.id)
+                      }
+                      className="bg-amber-400/15 px-2 py-1 text-[10px] text-amber-200"
+                    >
+                      Promote draft
+                    </button>
+                  )}
                 </div>
               </div>
             ))

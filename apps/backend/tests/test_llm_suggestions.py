@@ -9,6 +9,7 @@ from app.core.llm.suggestions import (
 from app.core.runtime_metrics import build_runtime_metrics
 from app.core.world import World, world
 from app.main import app
+from app.models.command import UserCommand
 from app.models.task import Task, TaskStep
 
 
@@ -387,3 +388,228 @@ def test_reasoning_creates_command_preview_suggestion(monkeypatch):
         item.type == LLMSuggestionType.COMMAND_PREVIEW
         for item in world.llm_suggestions
     )
+
+
+def test_review_queue_api_shape():
+    reset_global_world()
+    task = make_task()
+    service = SuggestionService(world)
+    service.create_suggestion(
+        suggestion_type=LLMSuggestionType.TASK_SUMMARY.value,
+        task_id=task.id,
+        content="Queue summary",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    client = TestClient(app)
+
+    response = client.get("/llm/suggestions/review-queue?only_pending=true")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "suggestions" in payload
+    assert "counts_by_status" in payload
+    assert payload["suggestions"][0]["related_task_summary"]["id"] == task.id
+
+
+def test_review_queue_filters_and_counts():
+    reset_global_world()
+    dev_task = make_task()
+    analytics_task = Task(
+        title="Analytics suggestion task",
+        description="Analytics suggestion task description",
+        department="analytics",
+    )
+    world.add_task(analytics_task)
+    service = SuggestionService(world)
+    service.create_suggestion(
+        suggestion_type=LLMSuggestionType.TASK_SUMMARY.value,
+        task_id=dev_task.id,
+        content="Dev summary",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    service.create_suggestion(
+        suggestion_type=LLMSuggestionType.MANAGER_REVIEW.value,
+        task_id=analytics_task.id,
+        content="Analytics review",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/llm/suggestions/review-queue?department=analytics&type=manager_review"
+    )
+    payload = response.json()
+    assert response.status_code == 200
+    assert len(payload["suggestions"]) == 1
+    assert payload["counts_by_type"]["task_summary"] == 1
+    assert payload["counts_by_department"]["analytics"] == 1
+
+
+def test_expiration_policy_and_bulk_expire(monkeypatch):
+    from app.config.settings import settings
+
+    reset_global_world()
+    monkeypatch.setattr(settings, "LLM_SUGGESTION_TTL_MINUTES", 1)
+    service = SuggestionService(world)
+    suggestion = service.create_suggestion(
+        suggestion_type=LLMSuggestionType.TASK_SUMMARY.value,
+        content="Old summary",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    suggestion.created_at -= 3600
+    client = TestClient(app)
+
+    response = client.post("/llm/suggestions/bulk-expire", json={})
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+    assert service.get_suggestion(suggestion.id).status == "expired"
+
+
+def test_bulk_reject():
+    reset_global_world()
+    service = SuggestionService(world)
+    first = service.create_suggestion(
+        suggestion_type=LLMSuggestionType.TASK_SUMMARY.value,
+        content="A",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    second = service.create_suggestion(
+        suggestion_type=LLMSuggestionType.MANAGER_REVIEW.value,
+        content="B",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/llm/suggestions/bulk-reject",
+        json={
+            "ids": [first.id, second.id],
+            "rejection_reason": "bulk reject",
+            "reviewed_by": "manager-bulk",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["count"] == 2
+    assert service.get_suggestion(first.id).status == "rejected"
+    assert service.get_suggestion(second.id).reviewed_by == "manager-bulk"
+
+
+def test_apply_effect_preview_in_review_queue():
+    reset_global_world()
+    service = SuggestionService(world)
+    service.create_suggestion(
+        suggestion_type=LLMSuggestionType.TASK_PLAN.value,
+        content="Plan",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    client = TestClient(app)
+    response = client.get("/llm/suggestions/review-queue")
+    item = response.json()["suggestions"][0]
+    assert "without changing active steps" in item["apply_effect_preview"]
+
+
+def test_promote_command_preview_to_draft_does_not_create_task():
+    reset_global_world()
+    command = UserCommand(
+        raw_text="сделай лендинг для кофейни",
+        normalized_text="сделай лендинг для кофейни",
+        inferred_department="development",
+        inferred_priority="normal",
+        inferred_capabilities=["code_generation"],
+    )
+    world.add_command(command)
+    service = SuggestionService(world)
+    suggestion = service.create_suggestion(
+        suggestion_type=LLMSuggestionType.COMMAND_PREVIEW.value,
+        command_id=command.id,
+        content="Improved preview",
+        structured_payload={
+            "improved_title": "Coffee landing page",
+            "improved_description": "Build a coffee shop landing page",
+            "department": "development",
+            "priority": "high",
+            "capabilities": ["code_generation"],
+            "plan_notes": ["Keep layout simple"],
+        },
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    client = TestClient(app)
+    response = client.post(
+        f"/llm/suggestions/{suggestion.id}/promote-command-draft"
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == "Coffee landing page"
+    assert world.tasks == {}
+
+
+def test_task_drilldown_includes_suggestions():
+    reset_global_world()
+    task = make_task()
+    SuggestionService(world).create_suggestion(
+        suggestion_type=LLMSuggestionType.TASK_SUMMARY.value,
+        task_id=task.id,
+        content="Summary",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    client = TestClient(app)
+    response = client.get(f"/tasks/{task.id}")
+    assert response.status_code == 200
+    assert response.json()["suggestions"][0]["task_id"] == task.id
+
+
+def test_command_drilldown_includes_suggestions():
+    reset_global_world()
+    command = UserCommand(
+        raw_text="напиши пост для Telegram",
+        normalized_text="напиши пост для telegram",
+        inferred_department="content",
+        inferred_priority="normal",
+        inferred_capabilities=["content_writing"],
+    )
+    world.add_command(command)
+    SuggestionService(world).create_suggestion(
+        suggestion_type=LLMSuggestionType.COMMAND_PREVIEW.value,
+        command_id=command.id,
+        content="Preview",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    client = TestClient(app)
+    response = client.get(f"/commands/{command.id}")
+    assert response.status_code == 200
+    assert response.json()["suggestions"][0]["command_id"] == command.id
+
+
+def test_suggestion_governance_metrics_and_timeline():
+    reset_global_world()
+    service = SuggestionService(world)
+    suggestion = service.create_suggestion(
+        suggestion_type=LLMSuggestionType.COMMAND_PREVIEW.value,
+        content="Preview",
+        source_provider="mock",
+        source_model="mock-safe-model",
+    )
+    suggestion.created_at -= 5 * 3600
+    service.bulk_expire()
+    service.promote_command_draft(suggestion.id)
+    client = TestClient(app)
+    client.get("/llm/suggestions/review-queue")
+
+    metrics = build_runtime_metrics(world)["global_metrics"]
+    assert metrics["llm_suggestions_expired_total"] >= 1
+    assert metrics["llm_suggestions_promoted_total"] >= 1
+    assert metrics["llm_review_queue_pending_count"] >= 0
+    assert metrics["llm_suggestions_oldest_pending_age_seconds"] >= 0
+
+    event_types = [item["type"] for item in world.events]
+    assert "llm_suggestion_bulk_expired" in event_types
+    assert "llm_suggestion_promoted_to_command_draft" in event_types
+    assert "llm_review_queue_viewed" in event_types

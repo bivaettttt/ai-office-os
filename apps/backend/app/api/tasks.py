@@ -24,6 +24,7 @@ from app.core.agent_runtime.control import (
     resume_task as resume_runtime_task,
     retry_failed_step as retry_runtime_step,
 )
+from app.core.llm.suggestions import SuggestionService
 from app.orchestration.event_bus import event_bus
 
 
@@ -66,6 +67,11 @@ def task_detail(task):
         None,
     )
 
+    suggestions = SuggestionService(world).list_suggestions(
+        task_id=task.id,
+        limit=50,
+    )
+
     return {
         "task": task.model_dump(mode="json"),
         "command": (
@@ -96,6 +102,10 @@ def task_detail(task):
         "steps": [
             step.model_dump(mode="json")
             for step in task.steps
+        ],
+        "suggestions": [
+            item.model_dump(mode="json")
+            for item in suggestions
         ],
     }
 

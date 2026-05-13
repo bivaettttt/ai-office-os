@@ -148,6 +148,10 @@ export type RuntimeGlobalMetrics = {
   llm_suggestions_approved_total?: number
   llm_suggestions_rejected_total?: number
   llm_suggestions_applied_total?: number
+  llm_suggestions_expired_total?: number
+  llm_suggestions_promoted_total?: number
+  llm_suggestions_oldest_pending_age_seconds?: number
+  llm_review_queue_pending_count?: number
   llm_provider_active?: string
   llm_real_calls_enabled?: boolean
 }
@@ -763,6 +767,54 @@ export type SuggestionApplyResult = {
 export type SuggestionReviewRequest = {
   reviewed_by?: string | null
   rejection_reason?: string | null
+}
+
+export type SuggestionApplyEffectPreview = {
+  can_apply: boolean
+  effect: string
+}
+
+export type LLMSuggestionContext = {
+  suggestion: LLMGeneratedSuggestion
+  related_task_summary?: Record<string, unknown> | null
+  related_command_summary?: Record<string, unknown> | null
+  manager_name?: string | null
+  agent_name?: string | null
+  department?: string | null
+  age_seconds: number
+  can_apply: boolean
+  apply_effect_preview: string
+}
+
+export type LLMSuggestionReviewQueueResponse = {
+  suggestions: LLMSuggestionContext[]
+  counts_by_status: Record<string, number>
+  counts_by_type: Record<string, number>
+  counts_by_department: Record<string, number>
+  oldest_pending_age_seconds: number
+  filters_applied: Record<string, unknown>
+}
+
+export type SuggestionBulkExpireRequest = {
+  older_than_minutes?: number | null
+  type?: string | null
+  status?: string | null
+  department?: string | null
+}
+
+export type SuggestionBulkRejectRequest = {
+  ids: string[]
+  rejection_reason: string
+  reviewed_by?: string | null
+}
+
+export type PromotedCommandDraft = {
+  title: string
+  description: string
+  department: string
+  priority: string
+  capabilities: string[]
+  plan_notes: string[]
 }
 
 export type Event = {

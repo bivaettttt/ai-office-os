@@ -24,6 +24,7 @@ SUCCESS_TYPES = {
     "llm_timeline_summary_generated",
     "llm_suggestion_approved",
     "llm_suggestion_applied",
+    "llm_suggestion_promoted_to_command_draft",
 }
 
 WARNING_TYPES = {
@@ -53,6 +54,9 @@ WARNING_TYPES = {
     "llm_suggestion_created",
     "llm_suggestion_rejected",
     "llm_suggestion_expired",
+    "llm_suggestion_bulk_expired",
+    "llm_suggestion_bulk_rejected",
+    "llm_review_queue_viewed",
 }
 
 MANAGER_TYPES = {
@@ -106,6 +110,10 @@ LLM_TYPES = {
     "llm_suggestion_rejected",
     "llm_suggestion_applied",
     "llm_suggestion_expired",
+    "llm_suggestion_bulk_expired",
+    "llm_suggestion_bulk_rejected",
+    "llm_suggestion_promoted_to_command_draft",
+    "llm_review_queue_viewed",
 }
 
 

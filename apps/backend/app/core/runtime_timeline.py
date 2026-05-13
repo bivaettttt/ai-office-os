@@ -22,6 +22,8 @@ SUCCESS_TYPES = {
     "llm_reasoning_completed",
     "llm_reasoning_cache_hit",
     "llm_timeline_summary_generated",
+    "llm_suggestion_approved",
+    "llm_suggestion_applied",
 }
 
 WARNING_TYPES = {
@@ -48,6 +50,9 @@ WARNING_TYPES = {
     "llm_reasoning_blocked",
     "llm_reasoning_rate_limited",
     "llm_reasoning_schema_validation_failed",
+    "llm_suggestion_created",
+    "llm_suggestion_rejected",
+    "llm_suggestion_expired",
 }
 
 MANAGER_TYPES = {
@@ -96,6 +101,11 @@ LLM_TYPES = {
     "llm_reasoning_rate_limited",
     "llm_reasoning_schema_validation_failed",
     "llm_timeline_summary_generated",
+    "llm_suggestion_created",
+    "llm_suggestion_approved",
+    "llm_suggestion_rejected",
+    "llm_suggestion_applied",
+    "llm_suggestion_expired",
 }
 
 

@@ -24,6 +24,11 @@ from app.core.llm.prompts import (
     timeline_summary_request,
 )
 from app.core.llm.service import LLMService
+from app.core.llm.suggestions import (
+    LLMSuggestionStatus,
+    LLMSuggestionType,
+    SuggestionService,
+)
 from app.core.llm.types import (
     CommandPreviewEnhancement,
     LLMReasoningDiagnostics,
@@ -51,6 +56,7 @@ class LLMReasoningService:
     ):
         self.world = world
         self.llm = LLMService(world)
+        self.suggestions = SuggestionService(world)
 
     def status(self) -> dict:
         return {
@@ -145,6 +151,7 @@ class LLMReasoningService:
             request=request,
             schema=CommandPreviewEnhancement,
             fallback=fallback,
+            suggestion_type=LLMSuggestionType.COMMAND_PREVIEW.value,
         )
 
     def draft_task_plan(
@@ -176,6 +183,7 @@ class LLMReasoningService:
             request=request,
             schema=TaskPlanDraft,
             fallback=fallback,
+            suggestion_type=LLMSuggestionType.TASK_PLAN.value,
         )
 
     def draft_manager_review(
@@ -185,6 +193,7 @@ class LLMReasoningService:
         steps: list[str],
         agent_name: str,
         result_summary: str,
+        task_id: str | None = None,
     ) -> dict:
         fallback = self._fallback_structured(
             {
@@ -207,6 +216,8 @@ class LLMReasoningService:
             request=request,
             schema=ManagerReviewDraft,
             fallback=fallback,
+            suggestion_type=LLMSuggestionType.MANAGER_REVIEW.value,
+            suggestion_task_id=task_id,
         )
 
     def summarize_task(
@@ -258,6 +269,8 @@ class LLMReasoningService:
             request=request,
             schema=TaskSummaryResult,
             fallback=fallback,
+            suggestion_type=LLMSuggestionType.TASK_SUMMARY.value,
+            suggestion_task_id=task.id,
             cache_input=json.dumps(
                 {
                     "task_id": task.id,
@@ -301,6 +314,10 @@ class LLMReasoningService:
             request=request,
             schema=TimelineSummaryResult,
             fallback=fallback,
+            suggestion_type=LLMSuggestionType.TIMELINE_SUMMARY.value,
+            suggestion_task_id=task_id,
+            suggestion_command_id=command_id,
+            suggestion_agent_id=agent_id,
             cache_input=json.dumps(
                 {
                     "task_id": task_id,
@@ -356,6 +373,7 @@ class LLMReasoningService:
             result = {
                 "text": response.content,
                 "provider_used": response.provider,
+                "model_used": response.model,
                 "safety_flags": [
                     flag.value for flag in response.safety_flags
                 ],
@@ -423,6 +441,10 @@ class LLMReasoningService:
         request,
         schema: type[BaseModel],
         fallback: dict,
+        suggestion_type: str | None = None,
+        suggestion_task_id: str | None = None,
+        suggestion_command_id: str | None = None,
+        suggestion_agent_id: str | None = None,
         cache_input: str | None = None,
     ) -> dict:
         cache_key = self._cache_key(request.purpose, cache_input)
@@ -485,6 +507,7 @@ class LLMReasoningService:
             result = {
                 **validated.model_dump(mode="json"),
                 "provider_used": response.provider,
+                "model_used": response.model,
                 "safety_flags": [
                     flag.value for flag in response.safety_flags
                 ],
@@ -513,6 +536,15 @@ class LLMReasoningService:
                 )
             if cache_key:
                 self._put_cache(cache_key, result)
+            suggestion_id = self._maybe_create_suggestion(
+                suggestion_type=suggestion_type,
+                result=result,
+                task_id=suggestion_task_id or request.task_id,
+                command_id=suggestion_command_id or request.command_id,
+                agent_id=suggestion_agent_id or request.agent_id,
+            )
+            if suggestion_id:
+                result["suggestion_id"] = suggestion_id
             return result
         except LLMGuardrailError as exc:
             self.world.add_event(
@@ -590,6 +622,7 @@ class LLMReasoningService:
         return {
             "text": text,
             "provider_used": "rules",
+            "model_used": "rules",
             "safety_flags": [],
             "fallback_used": True,
             "fallback_reason": reason,
@@ -604,6 +637,7 @@ class LLMReasoningService:
         return {
             **payload,
             "provider_used": "rules",
+            "model_used": "rules",
             "safety_flags": [],
             "fallback_used": True,
             "fallback_reason": reason,
@@ -648,6 +682,63 @@ class LLMReasoningService:
             "fallback_used": True,
             "fallback_reason": "rate_limited",
         }
+
+    def _maybe_create_suggestion(
+        self,
+        *,
+        suggestion_type: str | None,
+        result: dict[str, Any],
+        task_id: str | None = None,
+        command_id: str | None = None,
+        agent_id: str | None = None,
+    ) -> str | None:
+        if not suggestion_type:
+            return None
+        if result.get("provider_used") == "rules":
+            return None
+        if result.get("fallback_reason") in {
+            "invalid_json",
+            "schema_validation_failed",
+            "provider_failed",
+            "guardrail_blocked",
+            "rate_limited",
+            "reasoning_disabled",
+        }:
+            return None
+
+        content = (
+            result.get("review_text")
+            or result.get("summary")
+            or result.get("improved_description")
+            or result.get("text")
+            or json.dumps(result, ensure_ascii=False)
+        )
+        suggestion = self.suggestions.create_suggestion(
+            suggestion_type=suggestion_type,
+            status=LLMSuggestionStatus.PENDING_REVIEW.value,
+            task_id=task_id,
+            command_id=command_id,
+            agent_id=agent_id,
+            source_provider=result.get("provider_used", "mock"),
+            source_model=result.get("model_used", "unknown"),
+            content=content,
+            structured_payload={
+                key: value
+                for key, value in result.items()
+                if key
+                not in {
+                    "provider_used",
+                    "model_used",
+                    "safety_flags",
+                    "fallback_used",
+                    "fallback_reason",
+                    "suggestion_id",
+                }
+            },
+            safety_flags=result.get("safety_flags", []),
+            fallback_used=bool(result.get("fallback_used")),
+        )
+        return suggestion.id
 
     def _cache_key(
         self,

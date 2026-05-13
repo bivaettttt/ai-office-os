@@ -156,6 +156,7 @@ def review_completed_task(
                 steps=[step.title for step in task.steps],
                 agent_name=agent_name,
                 result_summary=summary,
+                task_id=task.id,
             )
             summary = draft["review_text"]
         except Exception:

@@ -144,6 +144,10 @@ export type RuntimeGlobalMetrics = {
   llm_reasoning_rate_limited_total?: number
   llm_reasoning_cache_hits_total?: number
   llm_reasoning_schema_failures_total?: number
+  llm_suggestions_pending?: number
+  llm_suggestions_approved_total?: number
+  llm_suggestions_rejected_total?: number
+  llm_suggestions_applied_total?: number
   llm_provider_active?: string
   llm_real_calls_enabled?: boolean
 }
@@ -707,7 +711,58 @@ export type Task = {
   reviewed_at?: number | null
   result?: string | null
   result_summary?: string | null
+  summary_note?: string | null
+  review_draft?: string | null
+  proposed_plan?: string[]
+  plan_notes?: string[]
   failure_reason?: string | null
+}
+
+export type LLMSuggestionType =
+  | "command_preview"
+  | "task_plan"
+  | "manager_review"
+  | "task_summary"
+  | "timeline_summary"
+
+export type LLMSuggestionStatus =
+  | "draft"
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "applied"
+  | "expired"
+
+export type LLMGeneratedSuggestion = {
+  id: string
+  type: LLMSuggestionType
+  status: LLMSuggestionStatus
+  task_id?: string | null
+  command_id?: string | null
+  agent_id?: string | null
+  manager_id?: string | null
+  source_provider: string
+  source_model: string
+  content: string
+  structured_payload?: Record<string, unknown> | null
+  safety_flags: string[]
+  fallback_used: boolean
+  created_at: number
+  reviewed_at?: number | null
+  reviewed_by?: string | null
+  applied_at?: number | null
+  rejection_reason?: string | null
+}
+
+export type SuggestionApplyResult = {
+  applied: boolean
+  task_id?: string
+  message: string
+}
+
+export type SuggestionReviewRequest = {
+  reviewed_by?: string | null
+  rejection_reason?: string | null
 }
 
 export type Event = {
@@ -757,4 +812,5 @@ export type WorldState = {
   permission_grants?: Record<string, PermissionGrant>
   sandbox_contracts?: Record<string, SandboxContract>
   llm_prompt_logs?: LLMPromptLogEntry[]
+  llm_suggestions?: LLMGeneratedSuggestion[]
 }

@@ -7,6 +7,7 @@ import {
 
 import { frontendConfig } from "@/lib/config"
 import type {
+  LLMGeneratedSuggestion,
   LLMPromptLogEntry,
   LLMReasoningDiagnostics,
   LLMReasoningStatus,
@@ -23,6 +24,8 @@ export default function LLMStatusPanel() {
     useState<LLMReasoningStatus | null>(null)
   const [diagnostics, setDiagnostics] =
     useState<LLMReasoningDiagnostics | null>(null)
+  const [suggestions, setSuggestions] =
+    useState<LLMGeneratedSuggestion[]>([])
   const [prompt, setPrompt] =
     useState("Summarize current office status")
   const [response, setResponse] =
@@ -36,19 +39,22 @@ export default function LLMStatusPanel() {
       logsResponse,
       reasoningResponse,
       diagnosticsResponse,
+      suggestionsResponse,
     ] =
       await Promise.all([
         fetch(`${frontendConfig.apiUrl}/llm/status`),
         fetch(`${frontendConfig.apiUrl}/llm/logs?limit=6`),
         fetch(`${frontendConfig.apiUrl}/llm/reasoning/status`),
         fetch(`${frontendConfig.apiUrl}/llm/reasoning/diagnostics`),
+        fetch(`${frontendConfig.apiUrl}/llm/suggestions?status=pending_review&limit=6`),
       ])
 
     if (
       !statusResponse.ok ||
       !logsResponse.ok ||
       !reasoningResponse.ok ||
-      !diagnosticsResponse.ok
+      !diagnosticsResponse.ok ||
+      !suggestionsResponse.ok
     ) {
       throw new Error("Failed to load LLM status")
     }
@@ -58,6 +64,8 @@ export default function LLMStatusPanel() {
     setLogs(logsData.items)
     setReasoningStatus(await reasoningResponse.json())
     setDiagnostics(await diagnosticsResponse.json())
+    const suggestionsData = await suggestionsResponse.json()
+    setSuggestions(suggestionsData.items)
   }
 
   useEffect(() => {
@@ -114,6 +122,25 @@ export default function LLMStatusPanel() {
     }
 
     setResponse(data.response)
+    await loadStatus()
+  }
+
+  async function reviewSuggestion(
+    suggestionId: string,
+    action: "approve" | "reject" | "apply"
+  ) {
+    await fetch(
+      `${frontendConfig.apiUrl}/llm/suggestions/${suggestionId}/${action}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reviewed_by: "manager-ui",
+        }),
+      }
+    )
     await loadStatus()
   }
 
@@ -239,6 +266,64 @@ export default function LLMStatusPanel() {
       )}
 
       <div className="mt-4 border-t border-white/10 pt-3">
+        <div className="mb-2 font-semibold">
+          Pending AI suggestions
+        </div>
+        <div className="mb-4 max-h-44 space-y-2 overflow-auto">
+          {suggestions.length === 0 ? (
+            <div className="text-white/35">none</div>
+          ) : (
+            suggestions.map((item) => (
+              <div
+                key={item.id}
+                className="border border-white/10 bg-black/20 p-2"
+              >
+                <div className="flex justify-between gap-2">
+                  <span>{item.type}</span>
+                  <span className="text-cyan-200">
+                    {item.source_provider}
+                  </span>
+                </div>
+                <div className="truncate text-white/45">
+                  {item.task_id || item.command_id || "unscoped"}
+                </div>
+                <div className="truncate text-white/65">
+                  {item.content}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void reviewSuggestion(item.id, "approve")
+                    }
+                    className="bg-green-400/15 px-2 py-1 text-[10px] text-green-200"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void reviewSuggestion(item.id, "reject")
+                    }
+                    className="bg-red-400/15 px-2 py-1 text-[10px] text-red-200"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void reviewSuggestion(item.id, "apply")
+                    }
+                    className="bg-cyan-400/15 px-2 py-1 text-[10px] text-cyan-200"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
         <div className="mb-2 font-semibold">
           Prompt logs
         </div>

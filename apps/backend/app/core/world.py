@@ -14,6 +14,7 @@ from app.core.tools.permissions import (
 )
 from app.core.tools.sandbox import SandboxContract
 from app.core.llm.types import LLMPromptLogEntry
+from app.core.llm.suggestions import LLMGeneratedSuggestion
 
 
 class World:
@@ -41,6 +42,8 @@ class World:
         self.sandbox_contracts: Dict[str, SandboxContract] = {}
 
         self.llm_prompt_logs: list[LLMPromptLogEntry] = []
+
+        self.llm_suggestions: list[LLMGeneratedSuggestion] = []
 
     # =====================================================
     # AGENTS
@@ -178,6 +181,14 @@ class World:
         self.llm_prompt_logs.append(entry)
         self.llm_prompt_logs = self.llm_prompt_logs[-500:]
 
+    def add_llm_suggestion(
+        self,
+        entry: LLMGeneratedSuggestion,
+    ):
+
+        self.llm_suggestions.append(entry)
+        self.llm_suggestions = self.llm_suggestions[-200:]
+
     # =====================================================
     # HYDRATION
     # =====================================================
@@ -238,6 +249,10 @@ class World:
             LLMPromptLogEntry.model_validate(value)
             for value in data.get("llm_prompt_logs", [])
         ][-500:]
+        self.llm_suggestions = [
+            LLMGeneratedSuggestion.model_validate(value)
+            for value in data.get("llm_suggestions", [])
+        ][-200:]
 
     # =====================================================
     # EVENTS
@@ -338,6 +353,11 @@ class World:
             "llm_prompt_logs": [
                 item.model_dump(mode="json")
                 for item in self.llm_prompt_logs
+            ],
+
+            "llm_suggestions": [
+                item.model_dump(mode="json")
+                for item in self.llm_suggestions
             ],
         }
 

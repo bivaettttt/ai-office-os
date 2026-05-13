@@ -107,4 +107,12 @@ class Task(BaseModel):
 
     result_summary: Optional[str] = None
 
+    summary_note: Optional[str] = None
+
+    review_draft: Optional[str] = None
+
+    proposed_plan: list[str] = Field(default_factory=list)
+
+    plan_notes: list[str] = Field(default_factory=list)
+
     failure_reason: Optional[str] = None

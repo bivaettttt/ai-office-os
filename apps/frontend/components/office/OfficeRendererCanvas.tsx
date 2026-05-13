@@ -15,6 +15,7 @@ import type {
 import { useWorldStore } from "@/store/useWorldStore"
 import type {
   AgentActivityLogEntry,
+  LLMGeneratedSuggestion,
   Task,
   TaskSummaryReasoningResponse,
   WorldState,
@@ -60,6 +61,8 @@ export default function OfficeRendererCanvas() {
     useState<Record<string, TaskSummaryReasoningResponse>>({})
   const [taskSummaryLoadingId, setTaskSummaryLoadingId] =
     useState<string | null>(null)
+  const [taskSuggestionsById, setTaskSuggestionsById] =
+    useState<Record<string, LLMGeneratedSuggestion[]>>({})
 
   const socketConnected = useWorldStore(
     (state) => state.socketConnected
@@ -153,8 +156,33 @@ export default function OfficeRendererCanvas() {
       : Object.values(tasks).find(
           (task) =>
             task.status !== "completed" &&
-            task.status !== "cancelled"
+          task.status !== "cancelled"
         ) || null
+
+  useEffect(() => {
+    const taskId = selectedTask?.id
+    if (!taskId) {
+      return
+    }
+    const activeTaskId: string = taskId
+    let disposed = false
+    async function loadSuggestions() {
+      const response = await fetch(
+        `${frontendConfig.apiUrl}/llm/suggestions?task_id=${activeTaskId}&limit=20`
+      )
+      const data = await response.json()
+      if (!disposed && response.ok) {
+        setTaskSuggestionsById((current) => ({
+          ...current,
+          [activeTaskId]: data.items,
+        }))
+      }
+    }
+    void loadSuggestions()
+    return () => {
+      disposed = true
+    }
+  }, [selectedTask?.id])
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#0f1722]">
@@ -365,6 +393,7 @@ export default function OfficeRendererCanvas() {
               setTaskSummaryById
             )
           }}
+          suggestions={taskSuggestionsById[selectedTask.id] || []}
         />
       )}
     </div>
@@ -642,6 +671,7 @@ function TaskDetails({
   summary,
   summaryLoading,
   onSummarize,
+  suggestions,
 }: {
   task: Task
   assignedAgentName?: string
@@ -652,6 +682,7 @@ function TaskDetails({
   summary?: TaskSummaryReasoningResponse
   summaryLoading: boolean
   onSummarize: () => void
+  suggestions: LLMGeneratedSuggestion[]
 }) {
   const phase = task.runtime_phase || task.status
   const canPause = phase === "executing"
@@ -800,6 +831,52 @@ function TaskDetails({
           </div>
         )}
       </div>
+
+      {(suggestions.length > 0 ||
+        task.summary_note ||
+        task.review_draft ||
+        (task.proposed_plan && task.proposed_plan.length > 0) ||
+        (task.plan_notes && task.plan_notes.length > 0)) && (
+        <div className="mt-3 border-t border-white/10 pt-3 text-xs">
+          <div className="mb-2 font-semibold text-white">
+            Suggestions
+          </div>
+          {task.summary_note && (
+            <div className="mb-1 text-white/70">
+              summary note: {task.summary_note}
+            </div>
+          )}
+          {task.review_draft && (
+            <div className="mb-1 text-white/70">
+              review draft: {task.review_draft}
+            </div>
+          )}
+          {task.proposed_plan && task.proposed_plan.length > 0 && (
+            <div className="mb-1 text-white/70">
+              proposed plan: {task.proposed_plan.join(" | ")}
+            </div>
+          )}
+          {task.plan_notes && task.plan_notes.length > 0 && (
+            <div className="mb-2 text-white/55">
+              notes: {task.plan_notes.join(" | ")}
+            </div>
+          )}
+          <div className="space-y-1">
+            {suggestions.slice(0, 5).map((item) => (
+              <div
+                key={item.id}
+                className="border border-white/10 bg-black/20 p-2 text-white/65"
+              >
+                <div className="flex justify-between gap-2">
+                  <span>{item.type}</span>
+                  <span>{item.status}</span>
+                </div>
+                <div className="truncate">{item.content}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {task.steps && task.steps.length > 0 && (
         <div className="mt-3 border-t border-white/10 pt-3 text-xs">

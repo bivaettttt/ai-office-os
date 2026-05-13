@@ -35,6 +35,7 @@ def build_runtime_metrics(world: World) -> dict:
     grants = list(world.permission_grants.values())
     audit_entries = list(world.tool_audit_log)
     llm_logs = list(world.llm_prompt_logs)
+    llm_suggestions = list(world.llm_suggestions)
     events = list(world.events)
     pending_approvals_by_risk = {
         "low": 0,
@@ -284,6 +285,34 @@ def build_runtime_metrics(world: World) -> dict:
                 for event in events
                 if event.get("type")
                 == "llm_reasoning_schema_validation_failed"
+            ]
+        ),
+        "llm_suggestions_pending": len(
+            [
+                item
+                for item in llm_suggestions
+                if item.status == "pending_review"
+            ]
+        ),
+        "llm_suggestions_approved_total": len(
+            [
+                item
+                for item in llm_suggestions
+                if item.status == "approved"
+            ]
+        ),
+        "llm_suggestions_rejected_total": len(
+            [
+                item
+                for item in llm_suggestions
+                if item.status == "rejected"
+            ]
+        ),
+        "llm_suggestions_applied_total": len(
+            [
+                item
+                for item in llm_suggestions
+                if item.status == "applied"
             ]
         ),
         "llm_provider_active": (

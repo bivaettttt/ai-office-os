@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.core.llm.guardrails import LLMGuardrailError
 from app.core.llm.reasoning import LLMReasoningService
 from app.core.llm.service import LLMService
+from app.core.llm.suggestions import SuggestionService
 from app.core.runtime_timeline import build_runtime_timeline
 from app.core.world import world
 
@@ -34,6 +35,11 @@ class TimelineSummaryRequest(BaseModel):
     command_id: str | None = None
     agent_id: str | None = None
     limit: int = 30
+
+
+class SuggestionReviewRequest(BaseModel):
+    reviewed_by: str | None = None
+    rejection_reason: str | None = None
 
 
 @router.get("/llm/status")
@@ -171,4 +177,92 @@ def llm_reasoning_timeline_summary(
         "safety_flags": result["safety_flags"],
         "fallback_used": result["fallback_used"],
         "fallback_reason": result.get("fallback_reason"),
+    }
+
+
+@router.get("/llm/suggestions")
+def list_llm_suggestions(
+    type: str | None = None,
+    status: str | None = None,
+    task_id: str | None = None,
+    command_id: str | None = None,
+    limit: int = 50,
+):
+    service = SuggestionService(world)
+    items = service.list_suggestions(
+        suggestion_type=type,
+        status=status,
+        task_id=task_id,
+        command_id=command_id,
+        limit=limit,
+    )
+    return {
+        "items": [
+            item.model_dump(mode="json") for item in items
+        ],
+        "total": len(items),
+    }
+
+
+@router.get("/llm/suggestions/{suggestion_id}")
+def get_llm_suggestion(
+    suggestion_id: str,
+):
+    suggestion = SuggestionService(world).get_suggestion(
+        suggestion_id
+    )
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    return suggestion.model_dump(mode="json")
+
+
+@router.post("/llm/suggestions/{suggestion_id}/approve")
+def approve_llm_suggestion(
+    suggestion_id: str,
+    request: SuggestionReviewRequest,
+):
+    try:
+        suggestion = SuggestionService(world).approve_suggestion(
+            suggestion_id,
+            reviewed_by=request.reviewed_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return suggestion.model_dump(mode="json")
+
+
+@router.post("/llm/suggestions/{suggestion_id}/reject")
+def reject_llm_suggestion(
+    suggestion_id: str,
+    request: SuggestionReviewRequest,
+):
+    try:
+        suggestion = SuggestionService(world).reject_suggestion(
+            suggestion_id,
+            reviewed_by=request.reviewed_by,
+            rejection_reason=request.rejection_reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return suggestion.model_dump(mode="json")
+
+
+@router.post("/llm/suggestions/{suggestion_id}/apply")
+def apply_llm_suggestion(
+    suggestion_id: str,
+    request: SuggestionReviewRequest,
+):
+    try:
+        result = SuggestionService(world).apply_suggestion(
+            suggestion_id,
+            reviewed_by=request.reviewed_by,
+        )
+        suggestion = SuggestionService(world).get_suggestion(
+            suggestion_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "suggestion": suggestion.model_dump(mode="json") if suggestion else None,
+        "result": result,
     }

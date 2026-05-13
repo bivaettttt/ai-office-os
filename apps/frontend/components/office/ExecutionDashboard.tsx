@@ -267,6 +267,14 @@ function GlobalSummary({
         label="Grant allowed"
         value={global.invocations_allowed_by_grant || 0}
       />
+      <SummaryCard
+        label="AI pending"
+        value={global.llm_suggestions_pending || 0}
+      />
+      <SummaryCard
+        label="AI applied"
+        value={global.llm_suggestions_applied_total || 0}
+      />
     </div>
   )
 }
